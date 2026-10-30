@@ -8,13 +8,18 @@ Source abstract is in `abstract.txt`.
 
 - `michael-love-bds-2026.qmd` — the deck (Quarto + R chunks, Typst engine)
 - `michael-love-bds-2026.pdf` — rendered output (git-ignored, along with `.quarto/`)
+- `images/` — hex stickers (tximeta, splicelogic, plyxp, tidyomics) copied from
+  `~/proj/mikelove.github.io/assets/`, which also has lab headshots and other logos.
+  Helpers defined in the first Typst block: `#sticker("name")` (2.3cm, 0.7cm from page top and right edges
+  of a slide) and `#sticker-row(..names, h: 3cm)` (title and summary slides).
 
 ## Workflow
 
 - The user renders the deck themselves (`quarto render michael-love-bds-2026.qmd`).
   Don't render unless asked; just edit the `.qmd`.
-- Target structure: 1 title slide + 6 content slides + 1 acknowledgments/funding
-  slide (8 pages total). Keep each slide to a single page.
+- Code chunks always go on their own slide (no bullets alongside); split a slide
+  when needed. Slide count is not fixed (currently 10 pages). Keep each slide
+  to a single page.
 
 ## Typst / Quarto notes
 
@@ -29,6 +34,15 @@ Source abstract is in `abstract.txt`.
 - Pandoc `.columns` divs don't render in Typst here; use a raw Typst `#grid(...)`.
 - `section-numbering: null` fails YAML validation; just omit it.
 
+## Content decisions
+
+- Content slide 1 is a workflow diagram (Typst `#grid` of `stage()` boxes; our
+  tools highlighted in UNC blue) that replaced the original motivation slide.
+- Ecosystem tools to mention: upstream oarfish, bambu, AnVIL/Terra; downstream
+  plyranges, DESeq2/satuRn (DEXSeq removed); related aggregation methods TreeTerminus/terminus,
+  treeclimbR, stageR. Not chosen: IsoQuant/FLAIR/StringTie2, fishpond/swish,
+  nullranges.
+
 ## R code
 
 - plyxp requires wrapping a SummarizedExperiment with `new_plyxp(se)` before
@@ -39,3 +53,23 @@ Source abstract is in `abstract.txt`.
 ## TODO
 
 - Funding slide has placeholder grant numbers marked TODO.
+
+## Layout notes
+
+- Quarto's Typst template justifies and hyphenates text; the first Typst block
+  sets `par(justify: false)` and `text(hyphenate: false)` to avoid stretched
+  spacing and "aggre-gate" breaks.
+- Page number is a custom footer (12pt grey, right-aligned) set after the title
+  slide; the title slide has no number.
+- Corner stickers must stay within the heading's height so they don't overlap
+  the first bullet.
+- Side margins are 2.8cm (was 1.6cm) to keep line lengths comfortable; the
+  workflow-diagram boxes use 13pt text so labels still fit the narrower width.
+- Slide content is vertically centered below the title: the heading show rule
+  adds `v(1fr)` after the heading and (via the `slide-open` state) another
+  `v(1fr)` before breaking to the next slide; a final `#v(1fr)` ends the document.
+- For layout checks, render a copy in the scratchpad, not in the project dir.
+- Code chunks use `set text(size: 26pt)` / `par(leading: 0.25em)` inside the
+  `Skylighting` override (renders ~ body size, since raw tokens scale to 0.8em).
+  Keep code lines under ~50 characters; put comments on their own lines.
+  

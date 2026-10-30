@@ -1,0 +1,887 @@
+---
+title: "RBP workflow"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+---
+
+```{r libraries, message=FALSE, warning=FALSE}
+library(SummarizedExperiment)
+library(GenomicFeatures)
+library(dplyr)
+library(ggplot2)
+library(satuRn)
+library(limma)
+library(tibble)
+library(here)
+# splicelogic devel, loaded from source: clone the repo next to this one
+#   git clone -b devel https://github.com/thelovelab/splicelogic.git ../splicelogic
+# then load it with devtools (install.packages("devtools") if needed)
+devtools::load_all(here("../splicelogic"))
+```
+
+```{r setup, message=FALSE}
+# dir <- system.file("extdata", package = "splicelogic")
+# se <- readRDS(file.path(dir, "GTEx_v9_ONT_SummarizedExperiment.rds"))
+se <- readRDS(here("workflows/data/GTEx_v9_ONT_SummarizedExperiment.rds"))
+dim(se)
+
+keep <- rowSums(assay(se) >= 10) >= 6
+se <- se[keep, ]
+dim(se)
+# filters: 385669 -> 18985 transcripts
+
+library(DESeq2)
+library(tximeta)
+colsums <- colSums(assay(se, "counts"))
+cpm <- t(t(assay(se, "counts")) / colsums * 1e6)
+assay(se, "abundance") <- cpm
+
+# dummy lengths... no correction for length
+assay(se, "length", withDimnames=FALSE) <- matrix(1000, nrow=nrow(se), ncol=ncol(se))
+```
+
+How many samples each donor contributes to each condition, before `ctrl` /
+`exp` are relabelled WT / KD below.
+
+```{r samples_per_donor}
+samples_per_donor <- as.data.frame(colData(se)) |>
+  dplyr::count(donor, condition) |>
+  tidyr::pivot_wider(names_from = condition, values_from = n, values_fill = 0) |>
+  dplyr::mutate(total = ctrl + exp)
+
+# with a total row
+dplyr::bind_rows(
+  samples_per_donor,
+  dplyr::summarise(samples_per_donor, donor = "total",
+                   dplyr::across(c(ctrl, exp, total), sum))
+)
+```
+
+How the object was built, from `metadata(se)`. tximeta records its own
+version, the quantifier and the transcriptome. `quantInfo` holds oarfish's
+`meta_info.json` settings, which in this run do not include the oarfish
+version (unlike salmon's `salmon_version`), so that has to come from the
+original run.
+
+```{r provenance}
+md <- metadata(se)
+tibble::tibble(
+  field = c("tximeta version", "quantifier", "transcriptome", "genome",
+            "import time"),
+  value = c(as.character(md$tximetaInfo$version), md$tximetaInfo$type,
+            md$txomeInfo$index, md$txomeInfo$genome,
+            format(md$tximetaInfo$importTime))
+)
+# oarfish settings, identical across the 11 samples
+unique(md$quantInfo$prob_model)
+unique(md$quantInfo$alignment_source)
+```
+
+## DTU testing with satuRn
+
+We compare the experiment condition (`exp`, RBP knockdown) against
+control (`ctrl`) using satuRn.
+
+```{r dtu_design}
+colData(se)$condition <- dplyr::case_when(
+    colData(se)$condition == "ctrl" ~ "WT",
+    colData(se)$condition == "exp" ~ "KD"
+)
+# KD as reference level
+colData(se)$condition <- factor(colData(se)$condition, levels = c("KD", "WT"))
+
+# build design from the factor directly (matches satuRn vignette convention)
+condition <- colData(se)$condition
+donor <- factor(colData(se)$donor)
+design <- model.matrix(~ 0 + condition + donor)
+
+L <- limma::makeContrasts(
+  WT_vs_KD = conditionWT - conditionKD,
+  levels = design
+)
+L
+```
+
+```{r dtu_fit, message=FALSE}
+rowData(se)$isoform_id <- rowData(se)$tx_name
+# flatten CharacterList gene_id to plain character
+rowData(se)$gene_id <- vapply(rowData(se)$gene_id, `[`, character(1), 1)
+
+se <- se[
+  duplicated(rowData(se)$gene_id) |
+    duplicated(rowData(se)$gene_id, fromLast = TRUE),
+]
+# 18985 transcripts -> 11874 transcripts after removing single-isoform genes
+se <- satuRn::fitDTU(se, formula = ~0 + condition + donor)
+```
+
+```{r dtu_test, message=FALSE}
+se <- satuRn::testDTU(
+  object = se,
+  contrasts = L,
+  diagplot1 = TRUE,
+  diagplot2 = TRUE
+)
+```
+
+```{r dtu_results}
+gene_ids <- rowData(se)$gene_id
+
+# every tested transcript; `sig_res` below is the significant subset, and the
+# non-significant rows are the background pool for slSampleNonEventExons()
+dtu_res <- rowData(se)[["fitDTUResult_WT_vs_KD"]] |>
+  as.data.frame() |>
+  tibble::rownames_to_column("tx_name") |>
+  tibble::as_tibble() |>
+  dplyr::mutate(gene_id = gene_ids) |>
+  dplyr::select(tx_name, gene_id, estimates, pval, regular_FDR) |>
+  dplyr::arrange(pval)
+
+sig_res <- dtu_res |> dplyr::filter(regular_FDR < 0.1)
+
+sig_res <- sig_res |> mutate( tx_id = tx_name)
+sig_res
+```
+
+How many transcripts and genes are left after the FDR < 0.1 cut, split by the
+sign of the estimate (> 0 = higher usage in WT, < 0 = higher usage in KD). A
+gene counts as up (or down) when at least one of its significant transcripts
+is; a gene with both is one where splicelogic has a pair to compare.
+
+```{r sig_res_summary}
+sig_genes <- sig_res |>
+  dplyr::group_by(gene_id) |>
+  dplyr::summarise(n_up = sum(estimates > 0), n_down = sum(estimates < 0),
+                   .groups = "drop")
+
+tibble::tribble(
+  ~level,        ~set,                                 ~n,
+  "transcripts", "tested",                             nrow(dtu_res),
+  "transcripts", "FDR < 0.1",                          nrow(sig_res),
+  "transcripts", "FDR < 0.1, estimate > 0 (up, WT)",   sum(sig_res$estimates > 0),
+  "transcripts", "FDR < 0.1, estimate < 0 (down, KD)", sum(sig_res$estimates < 0),
+  "genes",       "tested",                             dplyr::n_distinct(dtu_res$gene_id),
+  "genes",       "with >= 1 FDR < 0.1 transcript",     nrow(sig_genes),
+  "genes",       "with >= 1 up transcript",            sum(sig_genes$n_up > 0),
+  "genes",       "with >= 1 down transcript",          sum(sig_genes$n_down > 0),
+  "genes",       "with >= 1 up and >= 1 down",         sum(sig_genes$n_up > 0 & sig_genes$n_down > 0)
+) |>
+  dplyr::mutate(pct = sprintf("%.1f%%", 100 * n / n[set == "tested"]),
+                .by = level)
+
+```
+
+The same genes split into three groups by the direction of their significant
+transcripts, with how many transcripts each group holds. Only the "up and
+down" genes can give events; the other two are dropped by the filter below.
+
+```{r sig_gene_classes}
+gene_classes <- sig_genes |>
+  dplyr::mutate(class = dplyr::case_when(
+    n_up > 0 & n_down > 0 ~ "up and down",
+    n_up > 0              ~ "up only",
+    TRUE                  ~ "down only"
+  )) |>
+  dplyr::group_by(class = factor(class, levels = c("up only", "down only",
+                                                   "up and down"))) |>
+  dplyr::summarise(genes = dplyr::n(),
+                   transcripts = sum(n_up + n_down),
+                   up_tx = sum(n_up),
+                   down_tx = sum(n_down)) |>
+  dplyr::mutate(class = as.character(class))
+
+# with a total row, which matches the FDR < 0.1 counts in the table above
+dplyr::bind_rows(
+  gene_classes,
+  dplyr::summarise(gene_classes, class = "total",
+                   dplyr::across(c(genes, transcripts, up_tx, down_tx), sum))
+)
+```
+
+```{r sig_res_filtered}
+# the significant transcripts, filtered to those with a partner in the same gene:
+# keep genes with >= 1 up and >= 1 down transcript (from `sig_genes` above).
+# Events always pair an up with a down transcript of the same gene, so this
+# only drops transcripts that could never be in an event; the events found
+# below are identical with or without it.
+paired_genes <- sig_genes$gene_id[sig_genes$n_up > 0 & sig_genes$n_down > 0]
+sig_res <- sig_res |> dplyr::filter(gene_id %in% paired_genes)
+
+c(transcripts = nrow(sig_res), genes = dplyr::n_distinct(sig_res$gene_id))
+
+# save sig_res for later use
+saveRDS(sig_res, here("workflows/data/sig_res.rds"))
+```
+
+```{r load_sig_res}
+# load the saved DTU results
+sig_res <- readRDS(here("workflows/data/sig_res.rds"))
+sig_res
+```
+
+```{r txdb, eval=FALSE}
+library(txdbmaker)
+# load TxDb for GRanges conversion
+# download once (warning: ~50MB compressed)
+wget https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_48/gencode.v48.annotation.gtf.gz
+
+txdb <- txdbmaker::makeTxDbFromGFF(
+  "/Users/beacm/Documents/splicelogic-paper/workflows/gencode.v48.annotation.gtf.gz",
+  format = "gtf"
+)
+# save to not rebuild every time
+AnnotationDbi::saveDb(txdb, here("workflows/data/gencode.v48.sqlite"))
+
+# check how many transcripts in se are in txdb
+rowData(se)$tx_name %in% AnnotationDbi::keys(txdb, "TXNAME") |> sum() / length(rowData(se)$tx_name)
+```
+## Splice event detection with splicelogic
+
+```{r make_exons, eval=FALSE}
+# build exon GRangesList and rename from internal TXID to TXNAME
+txdb <- AnnotationDbi::loadDb(here("workflows/data/gencode.v48.sqlite"))
+exons <- exonsBy(txdb, by = "tx")
+txps <- AnnotationDbi::select(txdb, keys(txdb, "TXID"), c("TXNAME", "GENEID"), "TXID") |>
+  tibble::as_tibble() |>
+  dplyr::mutate(TXID = as.character(TXID))
+# rename exons to match tx_name in se, matching by TXID
+all.equal(names(exons), txps$TXID)
+names(exons) <- txps$TXNAME[match(names(exons), txps$TXID)]
+saveRDS(exons, here("workflows/data/glinos_exons.rds"))
+```
+
+```{r input_formatting}
+# load from saved sqlite
+txdb <- AnnotationDbi::loadDb(here("workflows/data/gencode.v48.sqlite"))
+# load exons from saved rds
+exons <- readRDS(here("workflows/data/glinos_exons.rds"))
+```
+
+```{r preprare_exons}
+# prepare exons for splicelogic
+sig_exons <-  prepare_exons(
+  txdb, sig_res, coef_col = "estimates", verbose = TRUE
+)
+#save sl_exons for later use
+saveRDS(sig_exons, here("workflows/data/sl_exons_glinos_0.1.rds"))
+```
+
+```{r find_events}
+#find se
+se_events <- sig_exons |> preprocess(coef_col = "estimates")|> find_se()
+
+#find all events
+events <- sig_exons |> preprocess(coef_col = "estimates")|> find_all_events()
+```
+
+
+```{r collapse_redundant_events}
+# define a helper function
+my_paste <- \(x) paste(unique(x), collapse = ",")
+# rows are collapsed when they share the same exon and the same event type. The
+# exon is identified by `exon_key` (gene, chromosome, start, end and strand),
+# built as in the vignette's recipe for an exon id, rather than by `exon_id`:
+# the annotation gives the same exon more than one id when it is coding in one
+# transcript and non-coding in another
+collapsed_events <- events |>
+    dplyr::mutate(exon_key = paste(gene_id, seqnames, start, end, strand, sep = ":")) |>
+    dplyr::group_by(exon_key, event_type) |>
+    plyranges::reduce_ranges_directed(
+        n = plyranges::n(),
+        exon_id = my_paste(exon_id),
+        tx_id = my_paste(tx_id),
+        exon_rank = my_paste(exon_rank),
+        event_tx_id = my_paste(event_tx_id),
+  )
+```
+
+```{r barplot_event_types}
+event_counts <- events |>
+    as_tibble() |>
+    dplyr::group_by(event_type) |>
+    dplyr::summarise(count = dplyr::n())
+
+collapsed_event_counts <- collapsed_events |>
+    as_tibble() |>
+    dplyr::group_by(event_type) |>
+    dplyr::summarise(count = dplyr::n())
+
+# combine both count tables into one, labelled by source
+counts <- dplyr::bind_rows(
+  "All events" = event_counts,
+  "Collapsed events" = collapsed_event_counts,
+  .id = "set"
+)
+
+# event types from most to fewest events
+counts$event_type <- factor(
+  counts$event_type,
+  levels = event_counts$event_type[order(-event_counts$count)]
+)
+
+ggplot(counts, aes(x = event_type, y = count, fill = set)) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  scale_fill_manual(values = c(
+    "All events" = "#B0CFFF",       # light blue
+    "Collapsed events" = "#3A86FF"  # darker blue
+  )) +
+  labs(title = "Splice event counts",
+  x = "Event Type", y = "Count", fill = NULL) +
+  theme_bw()
+```
+
+```{r plot_events_by_gene}
+# use splicelogic's built-in plotting function to visualize events for one gene,
+# picked at random among the genes with events (the seed keeps the same pick on
+# every run, as long as the event set does not change)
+set.seed(14)
+gene_of_interest <- sample(unique(events$gene_id), 1)
+# filter events for the gene of interest
+events_for_gene <- events[events$gene_id == gene_of_interest]
+
+# visualize the events for the gene of interest
+splicelogic::plot_transcripts(events_for_gene, sig_exons, rescale_introns = TRUE) +
+  ggtitle(paste("Splice events for gene:", gene_of_interest))
+```
+
+```{r save_events_plots, eval=FALSE}
+# make a plot for each gene with events and save to files
+# plot_transcripts_by_gene returns a list of ggplot objects, one for each gene
+plots <- plot_transcripts_by_gene(events, sig_exons)
+# save each plot to the same pdf file - takes a while: -- 1725 genes 
+pdf(here("workflows/figures/splice_events_by_gene.pdf"), width = 8, height = 6)
+for (gene in names(plots)) {
+    print(plots[[gene]])
+}
+dev.off()
+```
+
+## Collapse redundant events
+
+`find_se()` returns an exon once per transcript pair it is part of: an exon in
+two down transcripts and skipped by two up ones comes back four times. The event counts above already collapse these (`collapsed_events`). For
+the sequence analyses below we also keep one row per exon, so that an exon
+shared by many transcripts does not weigh more in the profiles and logos, and
+the background set is sized by exons rather than pairs. `n` records how many
+pairs each exon came from. The collapse is the same as in
+`collapse_redundant_events`, applied to the SE events, and like it
+collapses rows only for the same exon (gene, chromosome, start, end, strand)
+and the same event type.
+
+```{r collapse_se}
+# TRUE: the sequence analyses below use one row per exon. FALSE: they use every
+# SE event, one row per transcript pair, as before the collapse, to compare
+collapse_se <- TRUE
+
+se_collapsed <- se_events |>
+    dplyr::mutate(exon_key = paste(gene_id, seqnames, start, end, strand, sep = ":")) |>
+    dplyr::group_by(exon_key, event_type) |>
+    plyranges::reduce_ranges_directed(
+        n = plyranges::n(),
+        gene_id = my_paste(gene_id),
+        exon_id = my_paste(exon_id),
+        tx_id = my_paste(tx_id),
+        exon_rank = my_paste(exon_rank),
+        event_tx_id = my_paste(event_tx_id),
+  )
+
+data.frame(
+  set    = c("SE"),
+  events = c(length(se_events)),
+  exons  = c(length(se_collapsed)),
+  max_n  = c(max(se_collapsed$n))
+)
+
+# the set the sequence analyses below use
+se_exons <- if (collapse_se) se_collapsed else se_events
+```
+
+### SE exons per gene
+
+How the SE events spread across genes: the number of distinct SE exons in each
+gene. `se_collapsed` already has one row per exon and gene, with `n` the events it
+came from, so the counts come straight from it.
+
+```{r se_exons_per_gene, fig.width=6, fig.height=3.5}
+se_per_gene <- se_collapsed |>
+  dplyr::group_by(gene_id) |>
+  dplyr::summarise(n_events = sum(n),
+                   n_exons  = plyranges::n())
+
+data.frame(
+  se_events = length(se_events),
+  se_exons  = length(se_collapsed),
+  se_genes  = nrow(se_per_gene)
+)
+
+# ggplot needs a data.frame, so the small per-gene summary is converted here
+as.data.frame(se_per_gene) |>
+  dplyr::count(n_exons) |>
+  ggplot(aes(x = factor(n_exons), y = n)) +
+  geom_col(fill = "#3A86FF", width = 0.6) +
+  geom_text(aes(label = n), vjust = -0.4, size = 3.5, colour = "grey20") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(title = "Distinct SE exons per gene",
+       subtitle = sprintf("%d SE events, %d distinct exons, %d genes",
+                          length(se_events), length(se_collapsed),
+                          nrow(se_per_gene)),
+       x = "Distinct SE exons in the gene", y = "Genes") +
+  theme_bw()
+```
+
+### GO enrichment of SE genes
+
+Which biological processes are the genes with an SE event enriched for? The
+test set is every gene with at least one SE event; the background (universe)
+is every gene tested for DTU, since only those could give an event. Testing
+against the whole genome instead would mostly pick up which genes are expressed
+with several isoforms in this tissue. GO biological process terms,
+over-representation test with Benjamini-Hochberg adjustment, and
+`clusterProfiler::simplify()` to merge near-identical terms.
+
+```{r go_se_genes, message=FALSE, fig.width=8, fig.height=6}
+se_genes  <- unique(sub("\\..*", "", as.character(se_events$gene_id)))
+universe  <- unique(sub("\\..*", "", dtu_res$gene_id))
+c(se_genes = length(se_genes), universe = length(universe))
+
+go_se <- clusterProfiler::enrichGO(
+  gene          = se_genes,
+  universe      = universe,
+  OrgDb         = org.Hs.eg.db::org.Hs.eg.db,
+  keyType       = "ENSEMBL",
+  ont           = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.05,
+  qvalueCutoff  = 0.2,
+  readable      = TRUE   # gene symbols in the geneID column
+)
+# merge redundant terms (semantic similarity > 0.7), keeping the most
+# significant of each group
+go_se <- clusterProfiler::simplify(go_se, cutoff = 0.7, by = "p.adjust",
+                                   select_fun = min)
+
+go_se_df <- as.data.frame(go_se)
+nrow(go_se_df)
+go_se_df |>
+  dplyr::select(Description, GeneRatio, BgRatio, p.adjust, geneID) |>
+  head(20)
+
+if (nrow(go_se_df) > 0) {
+  enrichplot::dotplot(go_se, showCategory = 15) +
+    labs(title = "GO biological process: genes with an SE event",
+         subtitle = sprintf("%d SE genes vs %d DTU-tested genes",
+                            length(intersect(se_genes, universe)), length(universe)))
+}
+```
+
+## Sequence context around the event exons, focusing on skipped exons (SE)
+
+The analysis below uses a set of sequence-context helpers consolidated in
+`helper.R` (nucleotide-composition profiles, background exon sampling,
+splice-site logos and RBP motif scanning). The splicelogic package itself only
+exports `get_seq()` for sequence work, so these stay as paper-repo helpers (for now).
+
+```{r seq_context_helpers, message=FALSE}
+source(here("workflows/helper.R"))
+```
+
+`slEventFlankProfiles()` takes a finder's output straight away: it flanks each
+exon (strand-aware, so "upstream" is 5' in transcription order), slides
+overlapping windows across the flank, and returns the per-window nucleotide
+fractions for each side.
+
+```{r flank_windows_events, message=FALSE}
+se_profiles <- slEventFlankProfiles(se_exons, genome = "hg38", width = 100)
+
+# rows = exons, cols = window_nucleotide (e.g. w1_A)
+dim(se_profiles$upstream)
+dim(se_profiles$downstream)
+```
+
+### Background set
+
+We want to compare the sequence context of the events with that of a control set.
+For the control set (non-event exons), we sample as many exons as there are in
+`se_exons` (one per SE exon, or one per SE event with `collapse_se = FALSE`),
+drawn at random from the internal exons of transcripts with no evidence of
+differential usage (`pval > 0.5`).
+
+```{r non_event_exons}
+non_event <- slSampleNonEventExons(
+  dtu_res, exons, n = se_exons, pval_min = 0.5, seed = 1
+)
+
+```
+
+```{r flank_windows_non_event, message=FALSE}
+non_event_profiles <- slEventFlankProfiles(
+  non_event, genome = "hg38", width = 100
+)
+dim(non_event_profiles$upstream)
+```
+
+The SE profiles stacked over the non-SE ones, on the same axes:
+
+```{r plot_updownstream_events, fig.width=10.5, fig.height=9}
+p_se <- slPlotFlankProfiles(se_profiles, exon_label = "SE")
+
+# one shared nucleotide legend at the top
+patchwork::wrap_plots(
+  p_se,
+  slPlotFlankProfiles(non_event_profiles, exon_label = "non-SE"),
+  ncol = 1, guides = "collect"
+) & theme(legend.position = "top")
+
+# One text size for every poster figure, in pt at 300 dpi: tick labels, axis
+# titles, legends and labels inside the plots all use it. se_composition and
+# rna_map are drawn at 3.6 x 3 in and 600 dpi, half the size at twice the
+# resolution, so they use poster_pt / 2 to come out the same size in pixels.
+poster_pt <- 24
+half_pt <- poster_pt / 2
+same_text <- theme(text = element_text(size = half_pt),
+                   axis.text = element_text(size = half_pt),
+                   axis.title = element_text(size = half_pt),
+                   legend.text = element_text(size = half_pt))
+
+# the SE profile alone, for the poster, styled to sit side by side with the RNA
+# map: the same size (3.6 x 3 in), text size, line width and legend layout.
+# No plot or legend title (the poster panel's heading and caption carry them),
+# but both axis titles are kept. Legend on the top, in one row.
+p_se_poster <- slPlotFlankProfiles(se_profiles, exon_label = "SE",
+                                   ylim = c(0, 0.5), hlines = seq(0, 0.4, by = 0.2),
+                                   base_size = half_pt, linewidth = 0.8) +
+  labs(title = NULL) +
+  same_text +
+  theme(legend.title = element_blank(),
+        legend.position = "top",
+        legend.direction = "horizontal",
+        legend.key.width = grid::unit(0.5, "cm"),
+        legend.key.height = grid::unit(7, "pt"),
+        legend.box.spacing = grid::unit(2, "pt"),
+        legend.margin = margin(0, 0, 0, 0),
+        plot.margin = margin(2, 2, 2, 2))
+dir.create(here("workflows", "figures", "poster"), showWarnings = FALSE, recursive = TRUE)
+# a 3.6 x 3 in frame at 600 dpi
+ggsave(here("workflows", "figures", "poster", "se_composition.png"), p_se_poster,
+       width = 3.6, height = 3, dpi = 600)
+```
+
+The two sets, one panel per nucleotide (mean ± standard error), and below
+them the difference between them, SE minus non-SE:
+
+```{r plot_se_vs_non_event, fig.width=10.5, fig.height=10}
+se_vs_non_event <- list(SE = se_profiles, "non-SE" = non_event_profiles)
+
+p_overlay <- slPlotFlankProfilesByNt(se_vs_non_event)
+p_overlay
+slPlotFlankProfilesByNt(se_vs_non_event, difference = TRUE)
+
+# poster version: same width as the RNA map (3.6 in), stacked under
+# se_composition
+# Large text for the poster and no axis or legend titles (the poster caption
+# carries them); the nucleotide as a label to the left of each row rather than
+# a title above it, to leave the 4 short rows to the data.
+p_overlay_poster <- slPlotFlankProfilesByNt(se_vs_non_event,
+                                            base_size = 8, linewidth = 0.7) +
+  facet_wrap(~ nt, ncol = 1, strip.position = "left", scales = "free_y") +
+  theme(axis.title = element_blank(),
+        legend.title = element_blank(),
+        strip.placement = "outside",
+        strip.text.y.left = element_text(angle = 0, face = "bold", size = 10),
+        panel.spacing.y = grid::unit(0.15, "lines"),
+        legend.key.width = grid::unit(0.8, "cm"),
+        legend.box.spacing = grid::unit(2, "pt"),
+        legend.margin = margin(0, 0, 0, 0),
+        plot.margin = margin(2, 2, 2, 2))
+# a 3.6 in frame at 600 dpi, text and lines halved as for se_composition
+ggsave(here("workflows", "figures", "poster", "se_vs_background.png"), p_overlay_poster,
+       width = 3.6, height = 2.325, dpi = 600)
+```
+
+An alternative, within-transcript control: for each event, the internal exon of
+the same transcript that is shared with the event partner and closest in rank
+to the event exon.
+
+```{r matched_non_event_exons, eval=FALSE, fig.width=8, fig.height=3.5}
+matched <- slMatchedNonEventExons(se_events, exons)
+
+slEventFlankProfiles(matched, genome = "hg38", width = 100) |>
+  slPlotFlankProfiles(exon_label = "matched exon")
+```
+
+## Splice-site sequence logos
+
+The window profiles above average over 10 bp, which smooths the splice site
+away. `slFlankLogoMatrices()` keeps every base position separate and returns a
+position frequency matrix per side, running `width` bases into the intron and
+`exon_bases` into the exon so the boundary is inside the matrix.
+
+Note which site each side carries: the region **upstream** of an exon is the
+end of the preceding intron and holds the **3' splice site** (acceptor,
+`...ag | EXON`); the region **downstream** is the start of the following intron
+and holds the **5' splice site** (donor, `EXON | gu...`).
+
+```{r logo_events_bits, message=FALSE, warning=FALSE, fig.width=13, fig.height=3}
+se_logo <- slFlankLogoMatrices(se_exons, genome = "hg38",
+                               width = 25, exon_bases = 3)
+
+# letter height = information content, the classic logo scaling: unconstrained
+# positions shrink to nothing and the consensus stands out
+slPlotFlankLogo(se_logo, method = "bits")
+```
+
+The same for the background set, to see whether the event splice sites differ
+from those of exons in transcripts with no differential usage.
+
+```{r logo_non_event, message=FALSE, warning=FALSE, fig.width=13, fig.height=3}
+non_event_logo <- slFlankLogoMatrices(non_event, genome = "hg38",
+                                      width = 25, exon_bases = 3)
+
+slPlotFlankLogo(non_event_logo, method = "bits")
+```
+
+```{r logo_difference}
+# where the two sets differ most, per position and nucleotide
+delta <- se_logo$downstream - non_event_logo$downstream
+round(delta[, order(-apply(abs(delta), 2, max))[1:6]], 3)
+```
+
+## PTBP1 RNA map
+
+Colours below are taken from the package, so they match `plot_transcripts()`:
+the up colour for transcripts with higher usage in WT (estimate > 0), the down
+colour for higher usage in KD, and `event_palette()` for event types.
+
+```{r plot_setup}
+# the package's own colours, read from plot_transcripts() so they stay in sync
+sl_up     <- formals(plot_transcripts)$up_color       # higher usage in WT
+sl_down   <- formals(plot_transcripts)$down_color     # higher usage in KD
+sl_grey   <- formals(plot_transcripts)$unknown_color  # not significant / other
+sl_events <- event_palette()
+
+# keep the standard chromosomes only, so every range is in the BSgenome
+standard_chr <- function(gr) {
+  gr <- GenomeInfoDb::keepStandardChromosomes(gr, pruning.mode = "coarse")
+  GenomeInfoDb::seqlevels(gr) <- GenomeInfoDb::seqlevelsInUse(gr)
+  gr
+}
+
+# the unfiltered counts: the per-sample usage plots use every transcript of a
+# gene, not only those kept for DTU
+se_raw   <- readRDS(here("workflows/data/GTEx_v9_ONT_SummarizedExperiment.rds"))
+raw_gid  <- sub("\\..*", "", vapply(rowData(se_raw)$gene_id, `[`, character(1), 1))
+raw_cond <- ifelse(se_raw$condition == "ctrl", "WT", "KD")
+raw_cnt  <- assay(se_raw, "counts")
+```
+
+SE exons are on down transcripts (higher usage in KD) and skipped in up
+transcripts (higher in WT): with PTBP1 present the exon is skipped, so these
+are PTBP1-induced skipping events. From PTBP1's RNA map we expect CU-rich
+motifs **upstream** of SE exons (around the 3' splice site), relative to the
+background exons.
+
+The motif is YCUY (Y = C or U), counted at every start position with
+overlapping matches allowed, in `W` nt of intron on each side of the exon. Each
+exon gives a 0/1 vector (1 where a motif starts), smoothed with a centred
+rolling mean; the profile is the mean ± s.e. across exons. The plot uses the
+same layout as the flank profiles above: one axis running through both
+introns, with the exon as a grey bar between them.
+
+```{r rna_map, message=FALSE, fig.width=8, fig.height=4.5}
+W <- 200
+smooth_nt <- 21
+motif_regex <- "(?=[CU]CU[CU])"  # lookahead, so overlapping hits all count
+
+# 0/1 matrix, exons x positions: 1 where a motif starts. get_seq() returns the
+# sequence in transcription order (minus strand reverse-complemented), and the
+# flanks are strand-aware, so column 1 of "upstream" is -W and column W is -1.
+flank_matrix <- function(gr, side) {
+  gr <- standard_chr(gr)
+  fl <- if (side == "upstream") {
+    plyranges::flank_upstream(gr, width = W)
+  } else {
+    plyranges::flank_downstream(gr, width = W)
+  }
+  seqs <- as.character(get_seq(fl, "hg38", as_rna = TRUE))
+  m <- matrix(0L, nrow = length(seqs), ncol = W)
+  for (i in seq_along(seqs)) {
+    pos <- gregexpr(motif_regex, seqs[i], perl = TRUE)[[1]]
+    pos <- pos[pos > 0]
+    m[i, pos] <- 1L
+  }
+  m
+}
+
+sets <- list(SE = se_collapsed, background = non_event)
+mats <- lapply(sets, function(gr) list(
+  upstream   = flank_matrix(gr, "upstream"),
+  downstream = flank_matrix(gr, "downstream")
+))
+sapply(mats, \(m) nrow(m$upstream))  # exons per set
+
+# per-exon rolling mean over smooth_nt, then mean +/- s.e. across exons. As in
+# slPlotFlankProfilesByNt(), both introns share one x axis: the upstream intron
+# at x = 1..W (-W..-1 nt), then a gap holding the exon bar, then the
+# downstream intron (+1..+W nt).
+gap <- 60
+profile_df <- function(m, side, set) {
+  sm <- t(apply(m, 1, \(x) as.numeric(stats::filter(x, rep(1 / smooth_nt, smooth_nt), sides = 2))))
+  pos <- if (side == "upstream") -W:-1 else 1:W
+  tibble::tibble(
+    set  = set,
+    side = side,
+    x    = if (side == "upstream") pos + W + 1 else pos + W + gap,
+    mean = colMeans(sm, na.rm = TRUE),
+    se   = apply(sm, 2, sd, na.rm = TRUE) / sqrt(nrow(sm))
+  )
+}
+
+set_labels <- sprintf("%s (n = %d)", names(mats), sapply(mats, \(m) nrow(m$upstream)))
+map_df <- dplyr::bind_rows(lapply(names(mats), function(s) dplyr::bind_rows(
+  profile_df(mats[[s]]$upstream, "upstream", s),
+  profile_df(mats[[s]]$downstream, "downstream", s)
+))) |>
+  dplyr::mutate(set = factor(set, levels = names(mats), labels = set_labels))
+
+# x axis: nt from the exon every 100, the splice sites at the inner ends, and
+# the exon bar in the middle (same labelling as .slFlankXAxis())
+exon_x <- W + (gap + 1) / 2
+bp <- seq(100, W, by = 100)
+x_breaks <- c(rev(-bp) + W + 1, W, exon_x, W + gap + 1, bp + W + gap)
+x_labels <- c(rev(-bp), "\n3'ss", "exon", "\n5'ss", paste0("+", bp))
+
+# SE in its event_palette() colour, solid; background grey, dashed
+map_cols <- setNames(c(sl_events[["se"]], "grey50"), set_labels)
+map_lty  <- setNames(c("solid", "dashed"), set_labels)
+
+ggplot(map_df, aes(x, mean, group = interaction(side, set))) +
+  geom_ribbon(aes(ymin = mean - se, ymax = mean + se, fill = set),
+              alpha = 0.25, colour = NA, na.rm = TRUE) +
+  geom_line(aes(colour = set, linetype = set), linewidth = 1, na.rm = TRUE) +
+  # the exon as a grey bar in the gap, and a black x-axis line under each
+  # intron, broken at the exon
+  .slFlankExonBar(W, gap, exon_x) +
+  .slFlankXLine(W, gap) +
+  coord_cartesian(clip = "off") +
+  scale_colour_manual(values = map_cols) +
+  scale_fill_manual(values = map_cols, guide = "none") +
+  scale_linetype_manual(values = map_lty) +
+  scale_x_continuous(breaks = x_breaks, labels = x_labels) +
+  # from 0, with no padding below, so the x-axis line sits exactly on 0
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.02))) +
+  labs(title = "PTBP1 RNA map: YCUY motifs around SE exons",
+       subtitle = sprintf("%d-nt rolling mean ± s.e.", smooth_nt),
+       x = "Relative position in intronic sequence (nt)",
+       y = "YCUY motif density per nt", colour = NULL, linetype = NULL) +
+  .slFlankTheme() +
+  theme(legend.key.width = grid::unit(1.2, "cm"))
+```
+
+Caveats: a 4-mer cannot start in the last 3 upstream positions without running
+into the exon, so those columns are always 0; the overlapping count gives long
+CU runs, such as the polypyrimidine tract, a lot of weight; and flanks of
+introns shorter than `W` run into the neighbouring exon.
+
+## Example SE gene: SMAP1
+
+Two panels: isoform usage per sample, and the events `find_all_events()`
+called in the gene. SMAP1 has two isoforms that differ by one 81-nt exon (plus
+their 5' and 3' ends). The exon-including isoform has higher usage in KD, so
+PTBP1 represses the exon. To plot another gene, add it to `example_genes`.
+
+Usage is each transcript's share of the gene's counts in the unfiltered
+matrix. Each DTU transcript (FDR < 0.1, the ones the events come from) gets its
+own colour: shades of the up colour for higher usage in WT, shades of the down
+colour for higher in KD. Every other transcript of the gene is pooled as
+"other".
+
+```{r example_genes, message=FALSE, fig.width=10, fig.height=5}
+example_genes <- c(SMAP1 = "ENSG00000112305")
+
+# KD first, then WT, numbered within condition in donor order
+ord <- order(factor(raw_cond, levels = c("KD", "WT")), se_raw$donor, colnames(se_raw))
+samp_lab <- character(ncol(se_raw))
+samp_lab[ord] <- ave(raw_cond[ord], raw_cond[ord], FUN = \(x) paste0(x, "-", seq_along(x)))
+
+# the package colour, then two lighter shades of it, for genes with more than
+# one DTU transcript in a direction
+shades <- \(col) grDevices::colorRampPalette(c(col, "white"))(5)[1:3]
+pal_up   <- shades(sl_up)
+pal_down <- shades(sl_down)
+
+plot_example_gene <- function(gene, gene_id) {
+  ex_events <- events[sub("\\..*", "", events$gene_id) == gene_id]
+  ex_exons  <- sig_exons[sub("\\..*", "", sig_exons$gene_id) == gene_id]
+
+  # the DTU transcripts, WT-up first, each ordered by effect size
+  ex_res <- dtu_res |>
+    dplyr::filter(tx_name %in% unique(ex_exons$tx_id)) |>
+    dplyr::arrange(dplyr::desc(estimates > 0), dplyr::desc(abs(estimates)))
+  up_tx   <- ex_res$tx_name[ex_res$estimates > 0]
+  down_tx <- ex_res$tx_name[ex_res$estimates < 0]
+
+  # legend labels: the transcript id alone
+  labs_tx <- setNames(ex_res$tx_name, ex_res$tx_name)
+
+  gene_cnt <- raw_cnt[raw_gid == gene_id, , drop = FALSE]
+  iso <- ifelse(rownames(gene_cnt) %in% names(labs_tx),
+                labs_tx[rownames(gene_cnt)], "other")
+  iso_levels <- c(labs_tx[up_tx], labs_tx[down_tx], "other")
+  iso_cols <- setNames(c(pal_up[seq_along(up_tx)], pal_down[seq_along(down_tx)], sl_grey),
+                       iso_levels)
+
+  usage_df <- rowsum(gene_cnt, iso) |>
+    sweep(2, colSums(gene_cnt), "/") |>
+    as.data.frame() |>
+    tibble::rownames_to_column("isoform") |>
+    tidyr::pivot_longer(-isoform, names_to = "sample", values_to = "usage") |>
+    dplyr::mutate(
+      sample  = factor(samp_lab[match(sample, colnames(se_raw))], levels = samp_lab[ord]),
+      isoform = factor(isoform, levels = iso_levels),
+      # "KD-3" -> condition "KD" (one shared label under its samples), "3"
+      condition = factor(sub("-.*", "", sample), levels = c("KD", "WT")),
+      sample_n  = factor(as.integer(sub(".*-", "", sample)))
+    )
+
+  p_usage <- ggplot(usage_df, aes(sample_n, usage, fill = isoform)) +
+    geom_col(width = 0.85) +
+    # one panel per condition, its name once below its sample numbers
+    facet_grid(~ condition, scales = "free_x", space = "free_x", switch = "x") +
+    scale_fill_manual(values = iso_cols, drop = FALSE) +
+    # zoom, not scale limits: a stack can sum to 1 + rounding error, and scale
+    # limits would drop that top segment as out of range
+    scale_y_continuous(expand = expansion(mult = c(0, 0.02))) +
+    coord_cartesian(ylim = c(0, 1)) +
+    labs(title = sprintf("%s: isoform usage per sample", gene),
+         x = NULL, y = "Share of gene expression", fill = NULL) +
+    theme_bw() +
+    theme(strip.placement = "outside",
+          strip.background = element_blank(),
+          panel.grid.major.x = element_blank())
+
+  # the events splicelogic called in this gene, on the transcripts they came
+  # from
+  p_events <- plot_transcripts(ex_events, ex_exons, rescale_introns = TRUE) +
+    labs(title = sprintf("%s: events called by find_all_events()", gene))
+
+  list(usage = p_usage, events = p_events)
+}
+
+example_plots <- Map(plot_example_gene, names(example_genes), example_genes)
+for (p in example_plots) {
+  print(p$events)
+  print(p$usage)
+}
+```
+
+## Session info
+
+The R and package versions (satuRn, splicelogic, Bioconductor, ...) this
+report was knitted with.
+
+```{r session_info}
+sessionInfo()
+```
