@@ -1,0 +1,35 @@
+Frameworks for multi-sample long-read RNA-seq analysis
+
+Michael Love, Beatriz Campillo, Justin Landis
+UNC-Chapel Hill, Genetics, Chapel Hill, NC, United States
+
+Long-read RNA sequencing allows capture of near-complete transcript structure,
+offering far more information per molecule than short reads. Multi-sample
+methods designed for short-read data do not immediately transfer directly to
+this setting, creating an opportunity for new methods that exploit this richer
+signal. We present open-source frameworks built on R/Bioconductor, the tidyomics
+project, and the oarfish quantification tool that address current gaps in
+provenance detection, event detection, and isoform-level inference for
+multi-sample long-read RNA-seq. Provenance-aware quantification has previously
+been ensured by tools such as tximeta, which recognizes a digest of the
+reference transcript sequences to link quantifications to their
+provenance. Long-read workflows often quantify against a mixed set of annotated
+reference transcripts and novel transcripts, so we extend strategies to cover
+reference-plus-novel annotations rather than a fixed reference alone. For event
+detection, short-read methods often inferred splicing events by counting reads
+spanning exon-exon junctions at non-constitutive exons, for example, or similar
+strategies for other events. Sequencing nearly the entire transcript yields more
+complete observations, allowing us to connect events at the transcript level and
+replace spanning-read ratio counting with statistical modeling of read counts
+that includes bias modeling. This still requires dedicated software to identify
+splicing events, coupled to quantitation and differential models. Long-read data
+also yield a wealth of isoform-level information, but meaningful biological
+differences may reside in sub-gene structure that is blurred or distributed
+across many expressed but similar isoforms. Fragmentation and other biases can
+further produce spurious expression across similar isoforms. We develop and
+evaluate novel methods for aggregation of isoforms informed by differential
+signal which still maintain control of false discovery rate. This work is
+available through three open source tools: tximeta (provenance detection),
+splicelogic (event detection), and plyxp (flexible dataset manipulation and
+aggregation). Together these tools lower the barrier to rigorous multi-sample
+long-read analysis.
