@@ -1,0 +1,172 @@
+---
+format:
+  typst:
+    papersize: presentation-16-9
+    margin:
+      x: 1.6cm
+      y: 1.2cm
+    fontsize: 20pt
+    mainfont: "Helvetica Neue"
+    keep-typ: false
+    include-in-header:
+      - text: |
+          #set page(numbering: "1", number-align: right + bottom)
+          #show heading.where(level: 1): it => {
+            pagebreak(weak: true)
+            set text(size: 30pt, fill: rgb("#13294B"))
+            block(below: 0.6em, it.body)
+          }
+execute:
+  echo: true
+  message: false
+  warning: false
+knitr:
+  opts_chunk:
+    comment: "#>"
+    dev: svg
+---
+
+```{=typst}
+#let Skylighting(fill: none, number: false, start: 1, sourcelines) = {
+  set text(size: 13pt)
+  set par(leading: 0.35em)
+  let blocks = []
+  for ln in sourcelines { blocks = blocks + ln + EndLine() }
+  block(fill: rgb("#f1f3f5"), width: 100%, inset: 6pt, radius: 3pt,
+    breakable: false, blocks)
+}
+#set page(numbering: none)
+#v(1fr)
+#text(size: 36pt, weight: "bold", fill: rgb("#13294B"))[
+  Frameworks for multi-sample \ long-read RNA-seq analysis
+]
+#v(0.6em)
+#line(length: 40%, stroke: 2pt + rgb("#4B9CD3"))
+#v(0.6em)
+#text(size: 22pt)[*Michael Love*, Beatriz Campillo, Justin Landis]
+#v(0.2em)
+#text(size: 18pt, fill: luma(90))[
+  UNC-Chapel Hill, Department of Genetics \
+  Biological Data Science 2026
+]
+#v(1fr)
+#pagebreak()
+#set page(numbering: "1")
+```
+
+```{r}
+#| label: setup
+#| include: false
+suppressPackageStartupMessages({
+  library(SummarizedExperiment)
+  library(plyxp)
+  library(ggplot2)
+})
+```
+
+# Long reads change the multi-sample picture
+
+- Long reads capture near-complete transcript structure:
+  far more information per molecule than short reads
+- Short-read multi-sample methods don't transfer directly
+- Current gaps:
+  1. *Provenance* --- reference + novel transcripts
+  2. *Event detection* --- from whole-transcript observations
+  3. *Isoform-level inference* --- signal spread across similar isoforms
+- Built on R/Bioconductor, **tidyomics**, and **oarfish** quantification
+
+# Provenance: tximeta for reference + novel
+
+- tximeta recognizes a digest of the reference transcript
+  sequences, linking quantifications to their source
+- Long-read workflows quantify against
+  **annotated + novel** transcripts
+- We extend digest-based provenance to cover
+  reference-plus-novel annotations, not just a fixed reference
+
+```{r}
+#| eval: false
+library(tximeta)
+se <- tximeta(coldata, type = "oarfish")
+# reference + novel transcripts identified, metadata attached
+```
+
+# Event detection: splicelogic
+
+- Short-read approach: count reads spanning exon-exon junctions
+  at non-constitutive exons (spanning-read ratios)
+- Long reads observe (nearly) the whole transcript
+  → connect events at the transcript level
+- Replace ratio counting with **statistical models of read counts**,
+  including bias modeling
+- splicelogic identifies events and couples them to
+  quantification and differential models
+
+# plyxp: tidy manipulation of SummarizedExperiment
+
+```{r}
+#| label: toy-data
+#| echo: false
+set.seed(1)
+ntx <- 12
+counts <- matrix(rnbinom(ntx * 6, mu = 50, size = 10), ntx, 6,
+  dimnames = list(paste0("tx", 1:ntx), paste0("s", 1:6)))
+se <- SummarizedExperiment(list(counts = counts),
+  rowData = DataFrame(gene = rep(paste0("g", 1:4), each = 3)),
+  colData = DataFrame(condition = rep(c("A", "B"), each = 3)))
+```
+
+```{r}
+#| label: plyxp-mutate
+xp <- new_plyxp(se)
+xp |>
+  mutate(log_counts = log1p(counts),             # assay context
+         cols(trt = condition == "B"),           # colData context
+         rows(mean = rowMeans(.assays_asis$counts)))  # rowData context
+```
+
+# Aggregating isoforms with FDR control
+
+- Biological differences may live in sub-gene structure, blurred
+  across many expressed but similar isoforms
+- Aggregate isoforms *informed by differential signal*,
+  while maintaining FDR control
+
+```{r}
+#| label: plyxp-summarize
+gene_xp <- xp |>
+  group_by(rows(gene)) |>
+  summarize(counts = colSums(counts),
+            rows(.features = unique(gene)))
+assay(gene_xp)
+```
+
+# Summary
+
+- Three open-source Bioconductor tools for multi-sample long-read RNA-seq:
+  - **tximeta** --- provenance for reference + novel transcripts
+  - **splicelogic** --- transcript-level event detection with count models
+  - **plyxp** --- flexible dataset manipulation and isoform aggregation
+- Together, these lower the barrier to rigorous
+  multi-sample long-read analysis
+
+# Acknowledgments
+
+```{=typst}
+#grid(columns: (1fr, 1fr), gutter: 2em,
+  [
+    *Love lab, UNC-Chapel Hill*
+    - Beatriz Campillo
+    - Justin Landis
+
+    *tidyomics project*
+
+    *oarfish developers*
+  ],
+  [
+    *Funding*
+    - NIH / NHGRI --- _grant number TODO_
+    - _Other funding TODO_
+  ],
+)
+```
