@@ -69,6 +69,15 @@ knitr:
   box(clip: true, radius: 50%, width: 3cm, height: 3cm,
     image("images/" + file + ".jpg", width: 100%)),
   align(center, text(size: 13pt, fill: luma(90), name))))
+// notes to self for word-free slides: small grey text in the bottom margin
+#let notes(body) = place(bottom + left, dy: 1.2cm - 0.35cm, block(width: 100%, {
+  in-code.update(true)
+  set text(size: 11pt, fill: luma(150))
+  set par(leading: 0.4em)
+  show raw: set text(size: 1.2em)
+  body
+  in-code.update(false)
+}))
 #set page(numbering: none)
 #place(bottom + right,
   sticker-row("tximeta", "plyxp", "splicelogic", h: 2.8cm))
@@ -91,20 +100,17 @@ knitr:
 
 # A question to start
 
-- An LLM can write perfectly good R code for a
-  long-read RNA-seq analysis, in seconds
-- So why build frameworks and **new syntax**
-  (tximeta, plyxp, splicelogic)?
+- An LLM writes good R code for RNA-seq in seconds
+- So why build frameworks and **new syntax**?
 - Hold that thought --- we'll come back to it
 
 # Multi-sample long-read RNA-seq workflow
 
-- Long reads capture near-complete transcripts, but short-read
-  multi-sample methods don't transfer directly
-- Gaps: *provenance* of novel transcripts, *event detection*
-  from whole transcripts, *isoform-level inference*
-
 ```{=typst}
+#notes[Long reads capture near-complete transcripts, but short-read
+  multi-sample methods don't transfer directly. Gaps: provenance of novel
+  transcripts, event detection from whole transcripts, isoform-level
+  inference. Our tools in blue: tximeta, plyxp, splicelogic.]
 #let unc = rgb("#4B9CD3")
 #let stage(title, body, ours: false) = block(
   width: 100%, height: 100%, inset: 6pt, radius: 4pt,
@@ -122,7 +128,7 @@ knitr:
 #v(0.6em)
 #grid(
   columns: (1fr, auto, 1fr, auto, 1fr, auto, 1fr, auto, 1fr),
-  rows: 4cm,
+  rows: 4.5cm,
   column-gutter: 4pt,
   stage("Quantify")[oarfish \ bambu \ #text(fill: luma(90))[on AnVIL / Terra]],
   arrow,
@@ -142,38 +148,43 @@ knitr:
 #sticker("tximeta")
 ```
 
-- Quantifiers (oarfish, salmon) record a digest of the
-  reference transcript sequences in the index
-- tximeta matches it at import and attaches transcript and
-  genome metadata: no manual tracking of annotation releases
-- Long-read indices **mix** annotated (GENCODE) and novel
-  (bambu) transcripts: tximeta now checks each digest separately
+- Quantifiers record a digest of the reference transcripts
+- tximeta matches digests at import, attaches transcript metadata
+- No manual tracking of annotation sources or releases
+- Long-read indices **mix** annotated and novel transcripts
+- tximeta now checks each digest separately
 
 # tximeta: mixed reference workflow
 
 ```{=typst}
 #sticker("tximeta")
-#align(center, image("images/mixed-ref-diagram.png", height: 11.5cm))
+#align(center, image("images/mixed-ref-diagram.png", height: 10.5cm))
+#notes[oarfish records a digest per sub-index: annotated (e.g. GENCODE) and
+  novel (e.g. bambu, de novo, spike-ins, fusions); salmon via a Snakemake rule
+  writing `mixed_ref_digests.json`. `importData()` reads counts + digests;
+  `inspectDigests()` checks each against the digest table and
+  linkedTxome / linkedTxpData; `updateMetadata()` attaches what matches.]
 ```
 
 # tximeta: import, inspect, link, update
 
 ```{=typst}
 #sticker("tximeta")
+#notes[`importData()`: counts + per-sub-index digests (salmon: add
+  `mixedDigest = "mixed_ref_digests.json"`). `inspectDigests()`: annotated
+  matches GENCODE v48, novel has no match. `makeLinkedTxpData()`: register
+  novel transcripts once in the file cache. `updateMetadata(ranges = TRUE)`:
+  metadata + ranges for both sets. Still open: subsets of the annotation.]
 ```
 
 ```{r}
-# import counts + per-sub-index digests
 se <- importData(coldata, type = "oarfish")
-# annotated: GENCODE v48; novel: no match
 inspectDigests(se)
-# register novel transcripts once
 makeLinkedTxpData(digest = novel_digest,
   indexName = "my_novel_txps",
   txpData = novel_gr, source = "novel",
   organism = "Homo sapiens", release = "v1",
   genome = "GRCh38")
-# attach metadata + ranges for both sets
 se <- updateMetadata(se, ranges = TRUE)
 ```
 
@@ -184,32 +195,33 @@ se <- updateMetadata(se, ranges = TRUE)
 #student("justinlandis", "Justin Landis")
 ```
 
-- A SummarizedExperiment links count matrices to
-  transcript (row) and sample (column) metadata
-- plyxp brings dplyr verbs to SE objects: each expression is
-  scoped to assays (default), `rows()`, or `cols()`, and
-  pronouns (`.rows`, `.cols`, `.assays`) reach across
-- *Unambiguous*: code says where it reads and where results go
-- *Efficient*: lazy data masks, close to native speed;
-  now inside tidySummarizedExperiment
+- SummarizedExperiment links counts to transcript and sample data
+- plyxp brings dplyr verbs to SummarizedExperiment objects
+- Each expression is scoped: assays, `rows()`, or `cols()`
+- Pronouns like `.rows` and `.cols` reach across contexts
+- Explicit and efficient; now inside tidySummarizedExperiment
 
 # plyxp: mutate, filter, aggregate
 
 ```{=typst}
 #sticker("plyxp")
+#notes[`mutate()` in the assays context: scale counts by row data
+  (`.rows$tx_length`) and column data (`.cols$size_factor`). `rows()` /
+  `cols()` write to rowData / colData; `.assays_asis` gives the native matrix
+  for `rowMeans()`. `filter()` subsets by metadata. `group_by(rows(gene_id))` +
+  `summarize()` aggregates isoforms to genes. Timing: 4.7 ms native, 19 ms
+  plyxp, 372 ms unwound to a long table.]
 ```
 
 ```{r}
 xp <- new_plyxp(se) |>
   mutate(
-    # assays: scale by row / column data
     cts_bp = counts / .rows$tx_length,
     norm = counts / .cols$size_factor,
-    # rowData and colData contexts
     rows(ave = rowMeans(.assays_asis$counts)),
     cols(trt = condition == "trt")) |>
   filter(rows(ave > 10), cols(batch != "b3"))
-# aggregate isoforms to genes
+
 genes <- xp |>
   group_by(rows(gene_id)) |>
   summarize(counts = colSums(counts))
@@ -222,30 +234,30 @@ genes <- xp |>
 #student("beatrizcampillominano", "Beatriz Campillo")
 ```
 
-- Splicing changes rarely come one at a time, and short-read
-  methods use junction-read ratios without transcript context
-- splicelogic turns **any two sets of transcripts** into discrete
-  events: DTU results from any method (satuRn, DRIMSeq,
-  edgeR), or any partition such as novel vs. annotated
-- Nine event types (SE, MXE, RI, A5SS, ATSS, ...) returned as
-  genomic ranges, ready for plyranges and Biostrings
-- GTEx PTBP1 knockdown: introns upstream of skipped exons
-  recover PTBP1's binding preference
+- Splicing changes rarely come one event at a time
+- Short-read methods lack full-transcript context for events
+- splicelogic turns **any two transcript sets** into events
+- Works with any DTU method, or novel vs. annotated
+- Events are genomic ranges, ready for plyranges and Biostrings
 
 # splicelogic: find events, then ask questions
 
 ```{=typst}
 #sticker("splicelogic")
+#notes[`prepare_exons()` from DTU results of any method (satuRn, DRIMSeq,
+  edgeR), or `prepare_exons_by_partition()` for two transcript sets, e.g.
+  novel vs. annotated. `find_all_events()`: nine event types (SE, IE, MXE, RI,
+  SI, A5SS, A3SS, ATSS, ATES). Skipped exons, then 100 bp upstream intron, then
+  sequence: in GTEx PTBP1 knockdown these recover PTBP1's binding preference.
+  `%>%` needed for the `.` placeholder.]
 ```
 
 ```{r}
-# from DTU results (or two transcript sets
-# with prepare_exons_by_partition)
 exons <- prepare_exons(txdb, dtu_table = dtu,
     coef_col = "estimate") |>
   preprocess(coef_col = "estimate")
 events <- find_all_events(exons)
-# skipped exons -> upstream intron sequence
+
 exons %>%
   find_se() %>%
   flank_upstream(100) %>%
@@ -254,13 +266,10 @@ exons %>%
 
 # Back to the question: why new syntax?
 
-- tximeta, plyxp, splicelogic: provenance, data manipulation,
-  and event detection for multi-sample long-read RNA-seq
 - Code is cheap; *correct, checkable* code is not
-- Frameworks encode invariants that ad hoc code can silently
-  break: transcript provenance, assays in sync with metadata
-- Concise, explicit syntax is easier to review, including
-  LLM-written code, and leaves fewer places to be wrong
+- Frameworks encode invariants that ad hoc code breaks
+- Provenance and metadata stay in sync automatically
+- Explicit syntax is easier to review, including LLM code
 
 ```{=typst}
 #place(bottom + right, dy: 1.2cm - 0.5cm,

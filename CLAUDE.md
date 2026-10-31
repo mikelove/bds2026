@@ -21,10 +21,14 @@ Source abstract is in `abstract.txt`.
   Don't render unless asked; just edit the `.qmd`.
 - Code chunks always go on their own slide (no bullets alongside). Keep each
   slide to a single page.
+- Text slides: 3-5 bullets of 6-12 words each.
+- Diagram, code, and flowchart slides have no words besides the title (no code
+  comments either). Talking points go in `#notes[...]` (11pt grey, bottom
+  margin, software-name styling suppressed) as notes to self.
 - Max 12 slides: title, question, workflow, tximeta (concept, diagram, code),
   plyxp (concept, code), splicelogic (concept, code), back-to-question (merged
   with summary, sticker row), acknowledgments. One code slide per tool showing
-  its key operations, with comments as talking points.
+  its key operations; talking points live in `#notes[...]`.
 
 ## Typst / Quarto notes
 
