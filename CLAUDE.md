@@ -8,17 +8,19 @@ Source abstract is in `abstract.txt`.
 
 - `michael-love-bds-2026.qmd` — the deck (Quarto + R chunks, Typst engine)
 - `michael-love-bds-2026.pdf` — rendered output (git-ignored, along with `.quarto/`)
-- `images/` — hex stickers (tximeta, splicelogic, plyxp, tidyomics) copied from
+- `images/` — hex stickers (tximeta, splicelogic, plyxp, tidyomics; plyranges from
+  `~/bioc/BiocStickers/`) copied from
   `~/proj/mikelove.github.io/assets/`, which also has lab headshots and other logos.
-  Helpers defined in the first Typst block: `#sticker("name")` (2.3cm, 0.7cm from page top and right edges
-  of a slide) and `#sticker-row(..names, h: 3cm)` (title and summary slides).
+  Helpers defined in the first Typst block: `#sticker("name")` (3cm, 0.7cm from page top and right edges
+  of a slide) and `#sticker-row(..names, h: 3cm)` (title slide: tximeta, plyxp, splicelogic;
+  summary slide adds plyranges, tidyomics at the end).
 
 ## Workflow
 
 - The user renders the deck themselves (`quarto render michael-love-bds-2026.qmd`).
   Don't render unless asked; just edit the `.qmd`.
 - Code chunks always go on their own slide (no bullets alongside); split a slide
-  when needed. Slide count is not fixed (currently 10 pages). Keep each slide
+  when needed. Slide count is not fixed (currently 18 pages). Keep each slide
   to a single page.
 
 ## Typst / Quarto notes
@@ -31,13 +33,31 @@ Source abstract is in `abstract.txt`.
   line spacing are set by redefining `Skylighting` in the first Typst block of the
   body. Set size *and* `par(leading)` inside it, otherwise leading inherits from
   the 20pt body font and long outputs spill onto a new page.
+- Software names are styled automatically (monospace, deep blue #2B6CA3) by a
+  `show regex(...)` rule in the first Typst block; add new tool names to its
+  list. An `in-code` state set inside `Skylighting` keeps code chunks unstyled.
+- The Summary slide's bullets are a raw Typst `#list(...)` (not Markdown) so the
+  tool sub-list can get extra spacing (`list(spacing: 1.1em)` plus `#v()` above
+  and below); its sticker row sits partly in the bottom margin (`dy`).
 - Pandoc `.columns` divs don't render in Typst here; use a raw Typst `#grid(...)`.
 - `section-numbering: null` fails YAML validation; just omit it.
 
 ## Content decisions
 
-- Content slide 1 is a workflow diagram (Typst `#grid` of `stage()` boxes; our
+- Content slide 1 poses a question (why build frameworks / new syntax when an
+  LLM can write the code?); a "Back to the question" slide after Summary
+  answers it. The answer bullets are a draft for the user to revise.
+- Student photos: `#student(file, name)` (circular 3cm photo + name, bottom-right,
+  under the sticker column, caption in the bottom margin). Justin Landis on the
+  first plyxp slide,
+  Beatriz Campillo on the splicelogic slide; jpgs copied into `images/`.
+- Content slide 2 is a workflow diagram (Typst `#grid` of `stage()` boxes; our
   tools highlighted in UNC blue) that replaced the original motivation slide.
+- plyxp and splicelogic messaging follows the Intro/Conclusion of the papers in
+  `papers/` (plyxp.qmd, splicelogic.typ): plyxp = explicit contexts + pronouns,
+  lazy data masks (4.7 / 19 / 372 ms timing), used in tidySummarizedExperiment;
+  splicelogic = any two transcript sets -> events, any DTU method, GRanges output,
+  GTEx PTBP1 knockdown and bambu novel-vs-GENCODE examples.
 - Ecosystem tools to mention: upstream oarfish, bambu, AnVIL/Terra; downstream
   plyranges, DESeq2/satuRn (DEXSeq removed); related aggregation methods TreeTerminus/terminus,
   treeclimbR, stageR. Not chosen: IsoQuant/FLAIR/StringTie2, fishpond/swish,
@@ -47,20 +67,15 @@ Source abstract is in `abstract.txt`.
 
 - plyxp requires wrapping a SummarizedExperiment with `new_plyxp(se)` before
   dplyr verbs. Contexts: `rows()`, `cols()`; pronouns `.assays_asis`, `.cols`, etc.
-- Slides 4–5 use a small simulated transcript-level SE (12 tx, 4 genes, 6 samples).
-- tximeta chunk is `eval: false` (illustrative only).
-
-## TODO
-
-- Funding slide has placeholder grant numbers marked TODO.
+- All chunks are illustrative only: `execute: eval: false` globally (Quarto is
+  used just for syntax highlighting). No setup or toy-data chunks.
 
 ## Layout notes
 
 - Quarto's Typst template justifies and hyphenates text; the first Typst block
   sets `par(justify: false)` and `text(hyphenate: false)` to avoid stretched
   spacing and "aggre-gate" breaks.
-- Page number is a custom footer (12pt grey, right-aligned) set after the title
-  slide; the title slide has no number.
+- No page numbers (removed at the user's request).
 - Corner stickers must stay within the heading's height so they don't overlap
   the first bullet.
 - Side margins are 2.8cm (was 1.6cm) to keep line lengths comfortable; the

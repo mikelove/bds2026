@@ -1,0 +1,268 @@
+---
+format:
+  typst:
+    papersize: a0
+    margin:
+      x: 5cm
+      y: 5cm
+    syntax-highlighting: tango
+---
+
+```{=typst}
+#set text(font: "Arial", size: 24pt)
+
+#set page(numbering: none)
+
+#show heading.where(level: 1): it => block(
+  text(font: "Arial", size: 96pt, weight: "bold", it.body),
+  below: 12pt
+)
+
+#show heading.where(level: 2): it => block(
+  text(font: "Arial", size: 44pt, weight: "regular", it.body),
+  below: 24pt
+)
+
+#show heading.where(level: 3): it => block(
+  text(font: "Arial", size: 40pt, weight: "bold", it.body),
+  below: 40pt
+)
+
+#show figure.caption: it => text(font: "Arial", size: 24pt, it)
+```
+
+# _tximeta_ support for mixed reference sets
+
+## Michael I. Love^1^, Charlotte Soneson^2^, Rob Patro^3^
+
+^1^Department of Genetics, UNC-Chapel Hill, Chapel Hill, NC, US \
+^2^Friedrich Miescher Institute for Biomedical Research and SIB Swiss Institute of Bioinformatics, Basel, Switzerland \
+^3^Department of Computer Science, University of Maryland, College Park, MD, US
+
+---
+
+```{=typst}
+#columns(2, gutter: 1.5cm)[
+
+#figure(
+  image("mixed-ref-diagram.svg", width: 100%),
+  caption: [_tximeta_ new workflow for mixed reference transcripts using annotated and novel digests.]
+)
+```
+
+## Introduction
+
+RNA-seq quantification tools such as _salmon_ and _oarfish_ operate against
+an index built from reference transcript sequences. A key feature of
+these tools is that they record a digest of those sequences at
+index-build time. _tximeta_ reads that digest at import time to automatically
+identify the provenance of the reference. It then attaches the appropriate
+transcript and genome metadata to the resulting _SummarizedExperiment_,
+in the `rowData` and `rowRanges`.
+This workflow eliminates the need for users to manually track which 
+annotation release was used, and to manually reconstruct metadata tables.
+It works regardless of the actions of the initial analyst 
+performing quantification.
+
+The long-read quantifier _oarfish_ and _tximeta_ recently 
+extended this model to
+*mixed reference* indexing: a single index may combine a set of
+`annotated` transcripts (e.g. from GENCODE or Ensembl) with a set of
+`novel` transcripts (e.g. _de novo_ assembled, spike-in, 
+or fusion sequences not present in the reference annotation). 
+
+_tximeta_ v1.28 (Bioc 3.22, October 2025) introduced the following functions,
+`importData()` $\longrightarrow$ `inspectDigests()` $\longrightarrow$ 
+`updateMetadata()`, 
+allowing the user to check each sub-index digest independently,
+add linked metadata, and populate transcript metadata wherever 
+a match is found.
+Another new function, 
+`linkedTxpData()` allows simple tabular metadata on transcripts 
+to be stored in the file cache, where previously only GTF-based 
+metadata was supported in _tximeta_ via `linkedTxome()`.
+
+## Setup
+
+Three replicates from the SGNEx H9 cell line, quantified with oarfish
+against a mixed reference: GENCODE v48 annotated transcripts plus a set
+of novel transcripts.
+
+```{r}
+#| include: false
+library(BiocFileCache)
+bfc <- BiocFileCache()
+# remove the linked txpData
+res <- bfcquery(bfc, "linkedTxpData")
+if (nrow(res) > 0) {
+  bfcremove(bfc, rids = res$rid)
+}
+# remove the txpData for 43158f
+res <- bfcquery(bfc, "txpdata-43158f")
+if (nrow(res) > 0) {
+  bfcremove(bfc, rids = res$rid)
+}
+```
+
+```{r}
+#| include: false
+dir <- system.file("extdata/oarfish", package = "tximportData")
+names <- paste0("rep", 2:4)
+```
+
+```{r}
+#| message: false
+library(tximeta)
+library(SummarizedExperiment)
+files <- file.path(dir, paste0("sgnex_h9_", names, ".quant.gz"))
+coldata <- data.frame(files, names)
+```
+
+## Import
+
+`importData()` reads the counts and stores the index digests in metadata,
+returning an un-ranged `SummarizedExperiment`.
+
+```{r}
+se <- importData(coldata, type = "oarfish")
+```
+
+## Inspect digests
+
+`inspectDigests()` checks each index digest against tximeta's registries.
+The annotated index matches GENCODE v48 in the pre-computed hash table;
+the novel index has no match yet.
+
+```{r}
+inspectDigests(se)
+```
+
+## Update metadata
+
+`updateMetadata()` populates `rowData` for any transcripts whose index
+has a known match. To also attach genomic ranges, use `ranges = TRUE`.
+
+```{r}
+#| collapse: true
+se_updated <- updateMetadata(se)
+```
+
+```{=typst}
+#colbreak()
+```
+
+## Supplying novel transcript metadata
+
+Novel transcript metadata can be provided directly via the argument `txpData`, 
+or one can use `linkedTxpData()` to register them persistently, using the file cache. 
+`txpData` can take tabular data or _GRanges_ as input, 
+here we show with ranges.
+
+```{r}
+#| include: false
+novel <- data.frame(
+  seqnames = paste0("chr", rep(1:22, each = 500)),
+  start    = 1e6 + 1 + 0:499 * 1000,
+  end      = 1e6 + 1 + 0:499 * 1000 + 1000 - 1,
+  strand   = "+",
+  tx_name  = paste0("novel", 1:(22 * 500)),
+  gene_id  = paste0("novel_gene", rep(1:(22 * 10), each = 50))
+)
+```
+
+```{r}
+#| collapse: true
+library(GenomicRanges)
+head(novel, 2)
+novel_gr <- as(novel, "GRanges"); names(novel_gr) <- novel$tx_name
+```
+
+```{r}
+#| collapse: true
+se_full <- updateMetadata(se, txpData = novel_gr, ranges = TRUE)
+```
+
+## Persistent metadata via linking
+
+Rather than supplying `txpData` each time, novel transcript metadata can be
+registered once in the file cache with `makeLinkedTxome` or `makeLinkedTxpData()`. 
+The novel index digest is obtained from the `inspectDigests()` output or from the 
+oarfish output directly.
+
+```{r}
+#| collapse: true
+makeLinkedTxpData(
+  digest = "43158f2c8e88e3acd77c22aee557625a6f1b6a5038cfc7deb5e64903892d8070",
+  digestType = "sha256", indexName = "my_novel_txps", txpData = novel_gr,
+  source = "novel", organism = "Homo sapiens", release = "v1", genome = "GRCh38"
+)
+```
+
+## Digests now recognized
+
+After registration, `inspectDigests()` reflects the match.
+
+```{r}
+inspectDigests(se)
+```
+
+`updateMetadata()` finds and applies the linked metadata.
+
+```{r}
+#| collapse: true
+se_linked <- updateMetadata(se)
+```
+
+## Next steps
+
+**Backporting to _salmon_.** The mixed reference workflow currently
+targets _oarfish_, which natively records separate digests for each
+sub-index within the _minimap2_ index itself, 
+and in the quantification metadata JSON files (`*.meta_info.json`). 
+_salmon_ does not record per sub-index
+digests, so the new import model 
+is not yet available to _salmon_ users who combine reference transcripts. 
+Extending support will require either a change to _salmon_'s metadata output, 
+or a preprocessing step handle by a wrapper tool, or workflow rule, 
+that records the sub-index digests into a standardized location
+alongside indexing.
+
+**Quantification over subsets of the annotated transcript set.** A
+common use case is to quantify against a subset of the annotated
+reference, e.g. a tissue- or cell-type-specific transcriptome.
+Digest-based provenance breaks down here because
+the subset has a different hash from any entry in the pre-computed table,
+so _tximeta_ cannot identify it automatically. Again, a wrapper tool or 
+workflow rule may be a solution.
+
+## Other updates
+
+**New importer support for _edgeR_ and _limma_**. 
+New function `edgeR::DGEListFromTximeta()` assists with downstream
+analyses with other Bioconductor packages, including dividing 
+out count uncertainty for isoform-level anlaysis. 
+See _tximeta_ vingette.
+
+**New argument for GENCODE.** `gencode_gtf_prefix` allows specifying
+the desired GTF from GENCODE, e.g. `"chr_patch_hapl_scaff"`.
+
+**Ranges after summarization.** 
+`summarizeToGene()` argument `assignRanges` takes either 
+`“range”` (default) or `“abundant”`, for determining the ranges that are attached to the SE. 
+Default `"range"` provides the range of all exons of the gene.
+`“abundant”` instead returns the range of the most abundant 
+isoform in the data. See `?summarizedToGene`.
+
+## Feedback
+
+Please provide feedback via: <https://github.com/thelovelab/tximeta/issues>
+
+## Funding
+
+This work is supported in part by an Essential Open Source Software (EOSS) 
+grant from the Wellcome Trust [313919/Z/24/Z], 
+and by the National Institutes of Health grant R01-HG009937.
+
+```{=typst}
+]
+```

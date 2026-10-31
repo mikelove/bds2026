@@ -1,0 +1,97 @@
+import json
+import os
+import tempfile
+
+# -- user-configurable variables --
+SALMON = "salmon"
+DIGEST_TOOL = "compute_fasta_digest"
+THREADS = 8
+
+
+rule salmon_index_mixed:
+    """
+    Build a salmon index from separate annotated + novel FASTAs.
+    The combined FASTA is written into the index directory for provenance.
+    """
+    input:
+        annotated = "{index_dir}/annotated.fa.gz",
+        novel     = "{index_dir}/novel.fa.gz",
+    output:
+        index    = directory("{index_dir}/salmon_index"),
+        combined = "{index_dir}/salmon_index/combined.fa.gz",
+    shell:
+        """
+        mkdir -p {output.index}
+        cat {input.annotated} {input.novel} > {output.combined}
+        {SALMON} index -p {THREADS} -t {output.combined} -i {output.index}
+        """
+
+
+rule mixed_ref_digests:
+    """
+    Compute per-sub-FASTA sha256 digests and write mixed_ref_digests.json
+    into the index directory, so tximeta's importData() can identify provenance.
+    Note: compute_fasta_digest does not handle gzipped input; FASTAs are
+    decompressed to temp files first (gzip -dc, not zcat, for macOS compatibility).
+    """
+    input:
+        annotated = "{index_dir}/annotated.fa.gz",
+        novel     = "{index_dir}/novel.fa.gz",
+        index     = "{index_dir}/salmon_index",
+    output:
+        digest = "{index_dir}/salmon_index/mixed_ref_digests.json",
+    params:
+        ann_hash = "{index_dir}/salmon_index/annotated_hash.json",
+        nov_hash = "{index_dir}/salmon_index/novel_hash.json",
+    run:
+        ann_fa = tempfile.mktemp(suffix=".fa")
+        nov_fa = tempfile.mktemp(suffix=".fa")
+        try:
+            shell(f"gzip -dc {input.annotated} > {ann_fa}")
+            shell(f"gzip -dc {input.novel} > {nov_fa}")
+            shell(f"{DIGEST_TOOL} --reference {ann_fa} --out {params.ann_hash}")
+            shell(f"{DIGEST_TOOL} --reference {nov_fa} --out {params.nov_hash}")
+        finally:
+            for p in [ann_fa, nov_fa]:
+                if os.path.exists(p):
+                    os.unlink(p)
+
+        with open(params.ann_hash) as f:
+            ann = json.load(f)
+        with open(params.nov_hash) as f:
+            nov = json.load(f)
+
+        def nest(d):
+            return {"sha256_digests": {"sha256_seqs": d["seq_hash"]}}
+
+        with open(output.digest, "w") as f:
+            json.dump({
+                "annotated_transcripts_digest": nest(ann),
+                "novel_transcripts_digest":     nest(nov),
+            }, f, indent=2)
+
+        os.unlink(params.ann_hash)
+        os.unlink(params.nov_hash)
+
+
+rule salmon_quant_mixed:
+    """
+    Quantify with salmon and copy the mixed-reference digest JSON into the
+    quantification output directory so tximeta can find it alongside quant.sf.
+    """
+    input:
+        r1     = "/path/to/{sample}_1.fastq.gz",
+        r2     = "/path/to/{sample}_2.fastq.gz",
+        index  = "{index_dir}/salmon_index",
+        digest = "{index_dir}/salmon_index/mixed_ref_digests.json",
+    output:
+        quant  = "quants/{sample}/quant.sf",
+        digest = "quants/{sample}/mixed_ref_digests.json",
+    params:
+        dir = "quants/{sample}",
+    shell:
+        """
+        {SALMON} quant -i {input.index} -l A -p {THREADS} --gcBias \
+            -o {params.dir} -1 {input.r1} -2 {input.r2}
+        cp {input.digest} {output.digest}
+        """

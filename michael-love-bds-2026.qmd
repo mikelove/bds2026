@@ -21,6 +21,7 @@ format:
             v(1fr)
           }
 execute:
+  eval: false
   echo: true
   message: false
   warning: false
@@ -33,24 +34,44 @@ knitr:
 ```{=typst}
 #set par(justify: false)
 #set text(hyphenate: false)
+// software names: monospace + deep blue, except inside code chunks
+// (sized by the inline raw rule below)
+#let in-code = state("in-code", false)
+#show regex("\\b(tximeta|plyxp|splicelogic|plyranges|tidyomics|oarfish|bambu|DESeq2|satuRn|TreeTerminus|terminus|treeclimbR|stageR|tidySummarizedExperiment|dplyr|Biostrings|DRIMSeq|edgeR|Biosurfer|rlang)\\b"): it => context {
+  if in-code.get() { it } else { text(fill: rgb("#2B6CA3"), raw(it.text)) }
+}
+// inline code in slide text: scale up from raw's 0.8em (not inside chunks)
+#show raw.where(block: false): it => context {
+  if in-code.get() { it } else { text(size: 1.15em, it) }
+}
 #let Skylighting(fill: none, number: false, start: 1, sourcelines) = {
+  in-code.update(true)
   set text(size: 26pt)
   set par(leading: 0.25em)
   let blocks = []
   for ln in sourcelines { blocks = blocks + ln + EndLine() }
   block(fill: rgb("#f1f3f5"), width: 100%, inset: 6pt, radius: 3pt,
     breakable: false, blocks)
+  in-code.update(false)
 }
 #let sticker-img(name, h) = image("images/" + name + ".png", height: h)
 // corner sticker: same gap (0.7cm) from the page's top and right edges;
 // dx/dy are relative to the content area (margins x: 2.8cm, y: 1.2cm)
 #let sticker(name) = place(top + right, dx: 2.8cm - 0.7cm, dy: 0.7cm - 1.2cm,
-  sticker-img(name, 2.3cm))
+  sticker-img(name, 3cm))
 #let sticker-row(..names, h: 3cm) = stack(dir: ltr, spacing: 0.3cm,
   ..names.pos().map(n => sticker-img(n, h)))
+// student photo (circular) with name, bottom-right; right edge 0.7cm from
+// page edge, caption sits in the bottom margin (no page numbers)
+#let student(file, name) = place(bottom + right, dx: 2.8cm - 0.7cm,
+  dy: 1.2cm - 0.5cm, stack(
+  spacing: 0.25em,
+  box(clip: true, radius: 50%, width: 3cm, height: 3cm,
+    image("images/" + file + ".jpg", width: 100%)),
+  align(center, text(size: 13pt, fill: luma(90), name))))
 #set page(numbering: none)
 #place(bottom + right,
-  sticker-row("tximeta", "plyxp", "tidyomics", "splicelogic", h: 2.8cm))
+  sticker-row("tximeta", "plyxp", "splicelogic", h: 2.8cm))
 #v(1fr)
 #text(size: 36pt, weight: "bold", fill: rgb("#13294B"))[
   Frameworks for multi-sample \ long-read RNA-seq analysis
@@ -66,19 +87,15 @@ knitr:
 ]
 #v(1fr)
 #pagebreak()
-#set page(footer: context align(right,
-  text(size: 12pt, fill: luma(130), counter(page).display())))
 ```
 
-```{r}
-#| label: setup
-#| include: false
-suppressPackageStartupMessages({
-  library(SummarizedExperiment)
-  library(plyxp)
-  library(ggplot2)
-})
-```
+# A question to start
+
+- An LLM can write perfectly good R code for a
+  long-read RNA-seq analysis, in seconds
+- So why build frameworks and **new syntax**
+  (tximeta, plyxp, splicelogic)?
+- Hold that thought --- we'll come back to it
 
 # Multi-sample long-read RNA-seq workflow
 
@@ -139,41 +156,71 @@ suppressPackageStartupMessages({
 ```
 
 ```{r}
-#| eval: false
 library(tximeta)
 se <- tximeta(coldata, type = "oarfish")
 # links reference + novel transcripts
 ```
 
-# plyxp: tidy SummarizedExperiment
+# plyxp: a grammar for annotated matrices
+
+```{=typst}
+#sticker("plyxp")
+#student("justinlandis", "Justin Landis")
+```
+
+- A SummarizedExperiment links count matrices to feature
+  (row) and sample (column) metadata
+- Everyday steps cross these: divide counts by transcript
+  length, or by library size
+- plyxp brings dplyr verbs to SE objects, with each expression
+  scoped to a context: assays (default), `rows()`, `cols()`
+- Pronouns reach across contexts: `.rows`, `.cols`, `.assays`,
+  plus `_asis` versions in the data's native shape
+
+# plyxp: mutate across contexts
 
 ```{=typst}
 #sticker("plyxp")
 ```
 
 ```{r}
-#| label: toy-data
-#| echo: false
-set.seed(1)
-ntx <- 12
-counts <- matrix(rnbinom(ntx * 6, mu = 50, size = 10), ntx, 6,
-  dimnames = list(paste0("tx", 1:ntx), paste0("s", 1:6)))
-se <- SummarizedExperiment(list(counts = counts),
-  rowData = DataFrame(gene = rep(paste0("g", 1:4), each = 3)),
-  colData = DataFrame(condition = rep(c("A", "B"), each = 3)))
+xp <- new_plyxp(se) |>
+  mutate(
+    # assay context: matrix out
+    cts_bp = counts / .rows$tx_length,
+    norm = counts / .cols$size_factor,
+    # rowData / colData contexts
+    rows(ave = rowMeans(.assays_asis$counts)),
+    cols(treated = condition == "trt"))
+```
+
+# plyxp: filter by row and column metadata
+
+```{=typst}
+#sticker("plyxp")
 ```
 
 ```{r}
-#| label: plyxp-mutate
-xp <- new_plyxp(se) |>
-  mutate(
-    # assay context
-    log_counts = log1p(counts),
-    # colData context
-    cols(trt = condition == "B"),
-    # rowData context
-    rows(mean = rowMeans(.assays_asis$counts)))
+xp |>
+  filter(
+    rows(novel & ave > 10),
+    cols(batch != "b3"))
 ```
+
+# plyxp: explicit and efficient
+
+```{=typst}
+#sticker("plyxp")
+```
+
+- *Unambiguous*: syntax says where each expression reads
+  from and where its result is stored
+- *Efficient*: lazy data masks (rlang) avoid unwinding the
+  matrix into a long table
+  - Scale counts by length: 4.7 ms native, 19 ms plyxp,
+    372 ms unwound
+- Used inside tidySummarizedExperiment since Bioc 3.22
+- Same grammar could extend to AnnData and other classes
 
 # Aggregating isoforms with FDR control
 
@@ -194,60 +241,123 @@ xp <- new_plyxp(se) |>
 ```
 
 ```{r}
-#| label: plyxp-summarize
 gene_xp <- xp |>
   group_by(rows(gene)) |>
-  summarize(counts = colSums(counts),
-            rows(.features = unique(gene)))
-assay(gene_xp)
+  summarize(
+    counts = colSums(counts),
+    rows(.features = unique(gene)))
 ```
 
-# Event detection: splicelogic
+# splicelogic: from transcripts to events
+
+```{=typst}
+#sticker("splicelogic")
+#student("beatrizcampillominano", "Beatriz Campillo")
+```
+
+- Splicing changes are rarely a single event: skipping, splice
+  sites, retained introns, and start/end switches co-occur
+- Short-read methods call events from junction-read ratios,
+  without full-transcript context
+- Whole-transcript tools are often *vertically integrated*:
+  tied to their own quantifier or differential test
+- splicelogic turns **any two sets of transcripts** into
+  discrete splicing events
+
+# splicelogic: modular by design
 
 ```{=typst}
 #sticker("splicelogic")
 ```
 
-- Short-read approach: count reads spanning exon-exon junctions
-  at non-constitutive exons (spanning-read ratios)
-- Long reads observe (nearly) the whole transcript
-  → connect events at the transcript level
-- Replace ratio counting with **statistical models of read counts**,
-  including bias modeling
-- splicelogic identifies events and couples them to
-  quantification and differential models; plyranges for
-  tidy range operations on exons and events
+- Input: DTU results from any method (satuRn, DRIMSeq,
+  edgeR) or any partition, e.g. novel vs. annotated
+- Events: SE, IE, MXE, RI, A5SS, A3SS, ATSS, ATES
+- Output: genomic ranges with `event_` metadata, ready for
+  plyranges and Biostrings
+- Short, readable functions to adapt to new questions;
+  < 0.3 s for 150,000 exons; validated against Biosurfer
+
+# splicelogic: skipped exons and their introns
+
+```{=typst}
+#sticker("splicelogic")
+```
+
+```{r}
+exons <- prepare_exons(txdb, dtu_results,
+    coef_col = "estimate") |>
+  preprocess(coef_col = "estimate")
+
+exons %>%
+  find_skipped_exons() %>%
+  flank_upstream(100) %>%
+  mutate(intron_seq = get_seq(., "hg38"))
+```
+
+# splicelogic in practice: GTEx long reads
+
+```{=typst}
+#sticker("splicelogic")
+```
+
+- GTEx v9 ONT, fibroblasts with PTBP1 knockdown vs. control
+- oarfish on AnVIL, then satuRn: 1,987 DTU transcripts
+  in 1,023 genes (FDR < 0.1)
+- Intronic sequence upstream of PTBP1-dependent skipped exons
+  recapitulates PTBP1's known binding preference
+- bambu novel vs. GENCODE transcripts: 790 events,
+  mostly alternative TSS (33%) and TES (28%)
 
 # Summary
 
-- Three open-source Bioconductor tools for multi-sample long-read RNA-seq:
-  - **tximeta** --- provenance for reference + novel transcripts
-  - **plyxp** --- flexible dataset manipulation and isoform aggregation
-  - **splicelogic** --- transcript-level event detection with count models
-- Together, these lower the barrier to rigorous
-  multi-sample long-read analysis
-
 ```{=typst}
-#place(bottom + right, sticker-row("tximeta", "plyxp", "splicelogic"))
+// raw Typst so the tool sub-list gets extra spacing above, between, below
+#list(
+  [Three open-source Bioconductor tools for multi-sample long-read RNA-seq:
+    #v(0.3em)
+    #list(spacing: 1.1em,
+      [*tximeta* --- provenance for reference + novel transcripts],
+      [*plyxp* --- explicit dplyr grammar for SE; isoform aggregation],
+      [*splicelogic* --- splicing events from any two transcript sets],
+    )
+    #v(0.6em)],
+  [Together, these lower the barrier to rigorous
+    multi-sample long-read analysis],
+)
+#place(bottom + right, dy: 1.2cm - 0.5cm,
+  sticker-row("tximeta", "plyxp", "splicelogic", "plyranges", "tidyomics"))
 ```
+
+# Back to the question: why new syntax?
+
+- Code is cheap; *correct, checkable* code is not
+- Frameworks encode invariants that ad hoc code can silently
+  break: provenance of transcripts, assays kept in sync with
+  row/column metadata, FDR control when aggregating
+- Concise, declarative syntax is easier for humans to
+  review --- including review of LLM-written code
+- Good abstractions give LLMs less code to write, and fewer
+  places to be wrong
 
 # Acknowledgments
 
 ```{=typst}
-#grid(columns: (1fr, 1fr), gutter: 2em,
+#grid(columns: (3fr, 2fr), gutter: 1.5em,
   [
     *Love lab, UNC-Chapel Hill*
-    - Beatriz Campillo
-    - Justin Landis
+    - Beatriz Campillo --- splicelogic
+    - Justin Landis --- plyxp
 
-    *tidyomics project*
-
-    *oarfish developers*
+    *Collaborators*
+    - Rob Patro and Patro lab --- oarfish
+    - Charlotte Soneson --- tximeta
+    - Stefano Mangiola et al. --- tidyomics
   ],
   [
     *Funding*
-    - NIH / NHGRI --- _grant number TODO_
-    - _Other funding TODO_
+    - NIH / NHGRI \ R01-HG009937
+    - Wellcome Trust, Essential Open Source Software for Science (EOSS) \ 313919/Z/24/Z
   ],
 )
 ```
