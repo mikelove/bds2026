@@ -37,7 +37,7 @@ knitr:
 // software names: monospace + deep blue, except inside code chunks
 // (sized by the inline raw rule below)
 #let in-code = state("in-code", false)
-#show regex("\\b(tximeta|plyxp|splicelogic|plyranges|tidyomics|oarfish|bambu|DESeq2|satuRn|TreeTerminus|terminus|treeclimbR|stageR|tidySummarizedExperiment|dplyr|Biostrings|DRIMSeq|edgeR|Biosurfer|rlang)\\b"): it => context {
+#show regex("\\b(tximeta|plyxp|splicelogic|plyranges|tidyomics|oarfish|bambu|DESeq2|satuRn|TreeTerminus|terminus|treeclimbR|stageR|tidySummarizedExperiment|dplyr|Biostrings|DRIMSeq|edgeR|Biosurfer|rlang|salmon|Snakemake)\\b"): it => context {
   if in-code.get() { it } else { text(fill: rgb("#2B6CA3"), raw(it.text)) }
 }
 // inline code in slide text: scale up from raw's 0.8em (not inside chunks)
@@ -46,7 +46,7 @@ knitr:
 }
 #let Skylighting(fill: none, number: false, start: 1, sourcelines) = {
   in-code.update(true)
-  set text(size: 26pt)
+  set text(size: 24pt)
   set par(leading: 0.25em)
   let blocks = []
   for ln in sourcelines { blocks = blocks + ln + EndLine() }
@@ -142,23 +142,39 @@ knitr:
 #sticker("tximeta")
 ```
 
-- tximeta recognizes a digest of the reference transcript
-  sequences, linking quantifications to their source
-- Long-read workflows (e.g. oarfish quantification against
-  bambu-discovered transcripts) use **annotated + novel** transcripts
-- We extend digest-based provenance to cover
-  reference-plus-novel annotations, not just a fixed reference
+- Quantifiers (oarfish, salmon) record a digest of the
+  reference transcript sequences in the index
+- tximeta matches it at import and attaches transcript and
+  genome metadata: no manual tracking of annotation releases
+- Long-read indices **mix** annotated (GENCODE) and novel
+  (bambu) transcripts: tximeta now checks each digest separately
 
-# tximeta: import with provenance
+# tximeta: mixed reference workflow
+
+```{=typst}
+#sticker("tximeta")
+#align(center, image("images/mixed-ref-diagram.png", height: 11.5cm))
+```
+
+# tximeta: import, inspect, link, update
 
 ```{=typst}
 #sticker("tximeta")
 ```
 
 ```{r}
-library(tximeta)
-se <- tximeta(coldata, type = "oarfish")
-# links reference + novel transcripts
+# import counts + per-sub-index digests
+se <- importData(coldata, type = "oarfish")
+# annotated: GENCODE v48; novel: no match
+inspectDigests(se)
+# register novel transcripts once
+makeLinkedTxpData(digest = novel_digest,
+  indexName = "my_novel_txps",
+  txpData = novel_gr, source = "novel",
+  organism = "Homo sapiens", release = "v1",
+  genome = "GRCh38")
+# attach metadata + ranges for both sets
+se <- updateMetadata(se, ranges = TRUE)
 ```
 
 # plyxp: a grammar for annotated matrices
@@ -168,16 +184,16 @@ se <- tximeta(coldata, type = "oarfish")
 #student("justinlandis", "Justin Landis")
 ```
 
-- A SummarizedExperiment links count matrices to feature
-  (row) and sample (column) metadata
-- Everyday steps cross these: divide counts by transcript
-  length, or by library size
-- plyxp brings dplyr verbs to SE objects, with each expression
-  scoped to a context: assays (default), `rows()`, `cols()`
-- Pronouns reach across contexts: `.rows`, `.cols`, `.assays`,
-  plus `_asis` versions in the data's native shape
+- A SummarizedExperiment links count matrices to
+  transcript (row) and sample (column) metadata
+- plyxp brings dplyr verbs to SE objects: each expression is
+  scoped to assays (default), `rows()`, or `cols()`, and
+  pronouns (`.rows`, `.cols`, `.assays`) reach across
+- *Unambiguous*: code says where it reads and where results go
+- *Efficient*: lazy data masks, close to native speed;
+  now inside tidySummarizedExperiment
 
-# plyxp: mutate across contexts
+# plyxp: mutate, filter, aggregate
 
 ```{=typst}
 #sticker("plyxp")
@@ -186,66 +202,17 @@ se <- tximeta(coldata, type = "oarfish")
 ```{r}
 xp <- new_plyxp(se) |>
   mutate(
-    # assay context: matrix out
+    # assays: scale by row / column data
     cts_bp = counts / .rows$tx_length,
     norm = counts / .cols$size_factor,
-    # rowData / colData contexts
+    # rowData and colData contexts
     rows(ave = rowMeans(.assays_asis$counts)),
-    cols(treated = condition == "trt"))
-```
-
-# plyxp: filter by row and column metadata
-
-```{=typst}
-#sticker("plyxp")
-```
-
-```{r}
-xp |>
-  filter(
-    rows(novel & ave > 10),
-    cols(batch != "b3"))
-```
-
-# plyxp: explicit and efficient
-
-```{=typst}
-#sticker("plyxp")
-```
-
-- *Unambiguous*: syntax says where each expression reads
-  from and where its result is stored
-- *Efficient*: lazy data masks (rlang) avoid unwinding the
-  matrix into a long table
-  - Scale counts by length: 4.7 ms native, 19 ms plyxp,
-    372 ms unwound
-- Used inside tidySummarizedExperiment since Bioc 3.22
-- Same grammar could extend to AnnData and other classes
-
-# Aggregating isoforms with FDR control
-
-```{=typst}
-#sticker("plyxp")
-```
-
-- Biological differences may live in sub-gene structure, blurred
-  across many expressed but similar isoforms
-- Aggregate isoforms *informed by differential signal*,
-  while maintaining FDR control
-- Related: TreeTerminus / terminus, treeclimbR, stageR
-
-# plyxp: aggregating isoforms to genes
-
-```{=typst}
-#sticker("plyxp")
-```
-
-```{r}
-gene_xp <- xp |>
-  group_by(rows(gene)) |>
-  summarize(
-    counts = colSums(counts),
-    rows(.features = unique(gene)))
+    cols(trt = condition == "trt")) |>
+  filter(rows(ave > 10), cols(batch != "b3"))
+# aggregate isoforms to genes
+genes <- xp |>
+  group_by(rows(gene_id)) |>
+  summarize(counts = colSums(counts))
 ```
 
 # splicelogic: from transcripts to events
@@ -255,90 +222,50 @@ gene_xp <- xp |>
 #student("beatrizcampillominano", "Beatriz Campillo")
 ```
 
-- Splicing changes are rarely a single event: skipping, splice
-  sites, retained introns, and start/end switches co-occur
-- Short-read methods call events from junction-read ratios,
-  without full-transcript context
-- Whole-transcript tools are often *vertically integrated*:
-  tied to their own quantifier or differential test
-- splicelogic turns **any two sets of transcripts** into
-  discrete splicing events
+- Splicing changes rarely come one at a time, and short-read
+  methods use junction-read ratios without transcript context
+- splicelogic turns **any two sets of transcripts** into discrete
+  events: DTU results from any method (satuRn, DRIMSeq,
+  edgeR), or any partition such as novel vs. annotated
+- Nine event types (SE, MXE, RI, A5SS, ATSS, ...) returned as
+  genomic ranges, ready for plyranges and Biostrings
+- GTEx PTBP1 knockdown: introns upstream of skipped exons
+  recover PTBP1's binding preference
 
-# splicelogic: modular by design
-
-```{=typst}
-#sticker("splicelogic")
-```
-
-- Input: DTU results from any method (satuRn, DRIMSeq,
-  edgeR) or any partition, e.g. novel vs. annotated
-- Events: SE, IE, MXE, RI, A5SS, A3SS, ATSS, ATES
-- Output: genomic ranges with `event_` metadata, ready for
-  plyranges and Biostrings
-- Short, readable functions to adapt to new questions;
-  < 0.3 s for 150,000 exons; validated against Biosurfer
-
-# splicelogic: skipped exons and their introns
+# splicelogic: find events, then ask questions
 
 ```{=typst}
 #sticker("splicelogic")
 ```
 
 ```{r}
-exons <- prepare_exons(txdb, dtu_results,
+# from DTU results (or two transcript sets
+# with prepare_exons_by_partition)
+exons <- prepare_exons(txdb, dtu_table = dtu,
     coef_col = "estimate") |>
   preprocess(coef_col = "estimate")
-
+events <- find_all_events(exons)
+# skipped exons -> upstream intron sequence
 exons %>%
-  find_skipped_exons() %>%
+  find_se() %>%
   flank_upstream(100) %>%
   mutate(intron_seq = get_seq(., "hg38"))
 ```
 
-# splicelogic in practice: GTEx long reads
+# Back to the question: why new syntax?
+
+- tximeta, plyxp, splicelogic: provenance, data manipulation,
+  and event detection for multi-sample long-read RNA-seq
+- Code is cheap; *correct, checkable* code is not
+- Frameworks encode invariants that ad hoc code can silently
+  break: transcript provenance, assays in sync with metadata
+- Concise, explicit syntax is easier to review, including
+  LLM-written code, and leaves fewer places to be wrong
 
 ```{=typst}
-#sticker("splicelogic")
-```
-
-- GTEx v9 ONT, fibroblasts with PTBP1 knockdown vs. control
-- oarfish on AnVIL, then satuRn: 1,987 DTU transcripts
-  in 1,023 genes (FDR < 0.1)
-- Intronic sequence upstream of PTBP1-dependent skipped exons
-  recapitulates PTBP1's known binding preference
-- bambu novel vs. GENCODE transcripts: 790 events,
-  mostly alternative TSS (33%) and TES (28%)
-
-# Summary
-
-```{=typst}
-// raw Typst so the tool sub-list gets extra spacing above, between, below
-#list(
-  [Three open-source Bioconductor tools for multi-sample long-read RNA-seq:
-    #v(0.3em)
-    #list(spacing: 1.1em,
-      [*tximeta* --- provenance for reference + novel transcripts],
-      [*plyxp* --- explicit dplyr grammar for SE; isoform aggregation],
-      [*splicelogic* --- splicing events from any two transcript sets],
-    )
-    #v(0.6em)],
-  [Together, these lower the barrier to rigorous
-    multi-sample long-read analysis],
-)
 #place(bottom + right, dy: 1.2cm - 0.5cm,
   sticker-row("tximeta", "plyxp", "splicelogic", "plyranges", "tidyomics"))
 ```
-
-# Back to the question: why new syntax?
-
-- Code is cheap; *correct, checkable* code is not
-- Frameworks encode invariants that ad hoc code can silently
-  break: provenance of transcripts, assays kept in sync with
-  row/column metadata, FDR control when aggregating
-- Concise, declarative syntax is easier for humans to
-  review --- including review of LLM-written code
-- Good abstractions give LLMs less code to write, and fewer
-  places to be wrong
 
 # Acknowledgments
 

@@ -19,9 +19,12 @@ Source abstract is in `abstract.txt`.
 
 - The user renders the deck themselves (`quarto render michael-love-bds-2026.qmd`).
   Don't render unless asked; just edit the `.qmd`.
-- Code chunks always go on their own slide (no bullets alongside); split a slide
-  when needed. Slide count is not fixed (currently 18 pages). Keep each slide
-  to a single page.
+- Code chunks always go on their own slide (no bullets alongside). Keep each
+  slide to a single page.
+- Max 12 slides: title, question, workflow, tximeta (concept, diagram, code),
+  plyxp (concept, code), splicelogic (concept, code), back-to-question (merged
+  with summary, sticker row), acknowledgments. One code slide per tool showing
+  its key operations, with comments as talking points.
 
 ## Typst / Quarto notes
 
@@ -36,28 +39,32 @@ Source abstract is in `abstract.txt`.
 - Software names are styled automatically (monospace, deep blue #2B6CA3) by a
   `show regex(...)` rule in the first Typst block; add new tool names to its
   list. An `in-code` state set inside `Skylighting` keeps code chunks unstyled.
-- The Summary slide's bullets are a raw Typst `#list(...)` (not Markdown) so the
-  tool sub-list can get extra spacing (`list(spacing: 1.1em)` plus `#v()` above
-  and below); its sticker row sits partly in the bottom margin (`dy`).
+- The closing slide's sticker row sits partly in the bottom margin (`dy`).
 - Pandoc `.columns` divs don't render in Typst here; use a raw Typst `#grid(...)`.
 - `section-numbering: null` fails YAML validation; just omit it.
 
 ## Content decisions
 
 - Content slide 1 poses a question (why build frameworks / new syntax when an
-  LLM can write the code?); a "Back to the question" slide after Summary
-  answers it. The answer bullets are a draft for the user to revise.
+  LLM can write the code?); the "Back to the question" closing slide (which
+  also summarizes the three tools) answers it. The answer bullets are a draft for the user to revise.
 - Student photos: `#student(file, name)` (circular 3cm photo + name, bottom-right,
   under the sticker column, caption in the bottom margin). Justin Landis on the
   first plyxp slide,
   Beatriz Campillo on the splicelogic slide; jpgs copied into `images/`.
 - Content slide 2 is a workflow diagram (Typst `#grid` of `stage()` boxes; our
   tools highlighted in UNC blue) that replaced the original motivation slide.
+- tximeta section follows the mixed-reference material in `refs/`
+  (tximeta-mixed-ref-poster.qmd, salmon-with-mixed-ref-*, tximeta.Rmd):
+  importData() -> inspectDigests() -> updateMetadata(), makeLinkedTxpData(),
+  salmon (Snakemake digest rule + `mixedDigest`) is only mentioned in passing. Diagram is
+  `images/mixed-ref-diagram.png` from the tximeta repo (the SVG renders with
+  extra whitespace and small text in Typst, so use the PNG).
 - plyxp and splicelogic messaging follows the Intro/Conclusion of the papers in
   `papers/` (plyxp.qmd, splicelogic.typ): plyxp = explicit contexts + pronouns,
-  lazy data masks (4.7 / 19 / 372 ms timing), used in tidySummarizedExperiment;
-  splicelogic = any two transcript sets -> events, any DTU method, GRanges output,
-  GTEx PTBP1 knockdown and bambu novel-vs-GENCODE examples.
+  lazy data masks, used in tidySummarizedExperiment; splicelogic = any two
+  transcript sets -> events, any DTU method, GRanges output, GTEx PTBP1 example.
+  Isoform aggregation is mentioned only via the plyxp group_by/summarize code.
 - Ecosystem tools to mention: upstream oarfish, bambu, AnVIL/Terra; downstream
   plyranges, DESeq2/satuRn (DEXSeq removed); related aggregation methods TreeTerminus/terminus,
   treeclimbR, stageR. Not chosen: IsoQuant/FLAIR/StringTie2, fishpond/swish,
@@ -84,7 +91,7 @@ Source abstract is in `abstract.txt`.
   adds `v(1fr)` after the heading and (via the `slide-open` state) another
   `v(1fr)` before breaking to the next slide; a final `#v(1fr)` ends the document.
 - For layout checks, render a copy in the scratchpad, not in the project dir.
-- Code chunks use `set text(size: 26pt)` / `par(leading: 0.25em)` inside the
+- Code chunks use `set text(size: 24pt)` / `par(leading: 0.25em)` inside the
   `Skylighting` override (renders ~ body size, since raw tokens scale to 0.8em).
   Keep code lines under ~50 characters; put comments on their own lines.
   
