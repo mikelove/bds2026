@@ -25,7 +25,8 @@ Source abstract is in `abstract.txt`.
 - Diagram, code, and flowchart slides have no words besides the title (no code
   comments either). Talking points go in `#notes[...]` (11pt grey, bottom
   margin, software-name styling suppressed) as notes to self.
-- Max 12 slides: title, question, workflow, tximeta (concept, diagram, code),
+- Max 13 slides: title, question, why-new-syntax (bullets with smaller grey
+  `#detail[...]` second lines), workflow, tximeta (concept, diagram, code),
   plyxp (concept, code), splicelogic (concept, code), back-to-question (merged
   with summary, sticker row), acknowledgments. One code slide per tool showing
   its key operations; talking points live in `#notes[...]`.
@@ -51,13 +52,20 @@ Source abstract is in `abstract.txt`.
 
 - Content slide 1 poses a question (why build frameworks / new syntax when an
   LLM can write the code?); the "Back to the question" closing slide (which
-  also summarizes the three tools) answers it. The answer bullets are a draft for the user to revise.
+  also summarizes the three tools) answers it. Slide 3 makes the argument;
+  the closing slide gives one bullet per tool as evidence, plus a takeaway.
 - Student photos: `#student(file, name)` (circular 3cm photo + name, bottom-right,
   under the sticker column, caption in the bottom margin). Justin Landis on the
   first plyxp slide,
   Beatriz Campillo on the splicelogic slide; jpgs copied into `images/`.
 - Content slide 2 is a workflow diagram (Typst `#grid` of `stage()` boxes; our
   tools highlighted in UNC blue) that replaced the original motivation slide.
+  `stage(title, tools, desc)` = bold title, tools line, smaller grey
+  description (pass `none` for no tools), vertically centered. First column
+  stacks Annotate/Detect in a nested grid wrapped in `block(height: 100%)` so
+  the 1fr rows resolve; the next column holds two rotated arrows (±30deg)
+  converging on Quantify. A centered legend below (inline swatch box matching
+  `ours: true`) reads "recent work from the lab".
 - tximeta section follows the mixed-reference material in `refs/`
   (tximeta-mixed-ref-poster.qmd, salmon-with-mixed-ref-*, tximeta.Rmd):
   importData() -> inspectDigests() -> updateMetadata(), makeLinkedTxpData(),
@@ -95,7 +103,8 @@ Source abstract is in `abstract.txt`.
   adds `v(1fr)` after the heading and (via the `slide-open` state) another
   `v(1fr)` before breaking to the next slide; a final `#v(1fr)` ends the document.
 - For layout checks, render a copy in the scratchpad, not in the project dir.
-- Code chunks use `set text(size: 24pt)` / `par(leading: 0.25em)` inside the
+- Code chunks use `set text(size: 24pt)` / `par(leading: 0.5em)` inside the
   `Skylighting` override (renders ~ body size, since raw tokens scale to 0.8em).
   Keep code lines under ~50 characters; put comments on their own lines.
-  
+  - All raw text (code chunks, inline code, styled software names) uses Fira Code
+  via a global `#show raw: set text(font: "Fira Code")` in the first Typst block.

@@ -34,6 +34,7 @@ knitr:
 ```{=typst}
 #set par(justify: false)
 #set text(hyphenate: false)
+#show raw: set text(font: "Fira Code")
 // software names: monospace + deep blue, except inside code chunks
 // (sized by the inline raw rule below)
 #let in-code = state("in-code", false)
@@ -47,7 +48,7 @@ knitr:
 #let Skylighting(fill: none, number: false, start: 1, sourcelines) = {
   in-code.update(true)
   set text(size: 24pt)
-  set par(leading: 0.25em)
+  set par(leading: 0.5em)
   let blocks = []
   for ln in sourcelines { blocks = blocks + ln + EndLine() }
   block(fill: rgb("#f1f3f5"), width: 100%, inset: 6pt, radius: 3pt,
@@ -100,9 +101,30 @@ knitr:
 
 # A question to start
 
-- An LLM writes good R code for RNA-seq in seconds
-- So why build frameworks and **new syntax**?
-- Hold that thought --- we'll come back to it
+- An LLM writes good R/python code for RNA-seq in seconds
+- Why build frameworks and new syntax?
+
+# Why new syntax (for humans or LLMs)?
+
+```{=typst}
+#let detail(body) = text(size: 16pt, fill: luma(110), body)
+#{
+  set list(spacing: 1em)
+  set par(leading: 0.5em)
+  [
+    - Humans read and review code (for now) \
+      #detail[It should be concise and easy to read/comprehend]
+    - Grammar enables precision while maintaining readability, e.g. \
+      #detail[“find peaks near DE genes” vs. \
+      \
+      `genes |> filter(de) |> promoters() |> join_overlap_inner(peaks, maxgap=250)`] \
+    - Composable verbs map meaningfully to many analyses \
+      #detail[Standard data classes catch silent bookkeeping & genomics errors]
+    - Tested, maintained verbs beat fresh generated code \
+      #detail[Plus: same verbs work across backends]
+  ]
+}
+```
 
 # Multi-sample long-read RNA-seq workflow
 
@@ -112,34 +134,47 @@ knitr:
   transcripts, event detection from whole transcripts, isoform-level
   inference. Our tools in blue: tximeta, plyxp, splicelogic.]
 #let unc = rgb("#4B9CD3")
-#let stage(title, body, ours: false) = block(
-  width: 100%, height: 100%, inset: 6pt, radius: 4pt,
+#let stage(title, tools, desc, ours: false) = block(
+  width: 100%, height: 100%, inset: (x: 5pt, y: 4pt), radius: 4pt,
   fill: if ours { unc.lighten(80%) } else { luma(240) },
   stroke: if ours { 1.5pt + unc } else { 0.5pt + luma(180) },
-  {
-    set text(size: 13pt)
-    set par(leading: 0.4em)
-    set align(center)
-    text(weight: "bold", fill: rgb("#13294B"), title)
-    v(0.2em)
-    body
-  })
-#let arrow = align(horizon, text(size: 22pt, fill: luma(120), sym.arrow.r))
+  align(center + horizon, {
+    set par(leading: 0.35em)
+    stack(
+      text(size: 14pt, weight: "bold", fill: rgb("#13294B"), title),
+      ..if tools != none { (v(0.3em), text(size: 13pt, tools)) },
+      v(0.5em),
+      text(size: 11pt, fill: luma(80), desc))
+  }))
+#let arrow-glyph = text(size: 20pt, fill: luma(120), sym.arrow.r)
+#let arrow = align(center + horizon, arrow-glyph)
+#let gap = 0.5cm
 #v(0.6em)
 #grid(
-  columns: (1fr, auto, 1fr, auto, 1fr, auto, 1fr, auto, 1fr),
-  rows: 4.5cm,
+  columns: (1.15fr, 1cm, 1fr, auto, 1fr, auto, 1fr, auto, 1fr, auto, 1fr),
+  rows: 4.6cm,
   column-gutter: 4pt,
-  stage("Quantify")[oarfish \ bambu \ #text(fill: luma(90))[on AnVIL / Terra]],
+  block(height: 100%, grid(rows: (1fr, 1fr), row-gutter: gap,
+    stage("Annotate", none)[reference + filtering],
+    stage("Detect", none)[novel transcripts])),
+  block(height: 100%, grid(rows: (1fr, 1fr), row-gutter: gap,
+    align(center + horizon, rotate(30deg, arrow-glyph)),
+    align(center + horizon, rotate(-30deg, arrow-glyph)))),
+  stage("Quantify")[oarfish bambu][on cluster or cloud (AnVIL)],
   arrow,
-  stage("Import", ours: true)[*tximeta* \ provenance of \ reference + novel],
+  stage("Import", ours: true)[tximeta][automatic provenance of annotated + novel],
   arrow,
-  stage("Manipulate", ours: true)[*plyxp* \ tidyomics \ SE objects],
+  stage("Manipulate", ours: true)[plyxp][tidy verbs applied to standard data objects],
   arrow,
-  stage("Test & aggregate")[DESeq2 \ satuRn \ *isoform aggregation*],
+  stage("Test")[DESeq2 satuRn][assessing differences across samples],
   arrow,
-  stage("Events", ours: true)[*splicelogic* \ plyranges],
+  stage("Interpret", ours: true)[splicelogic plyranges][deducing causes and consequences],
 )
+#v(0.8em)
+#align(center, text(size: 13pt, fill: luma(80))[
+  #box(width: 0.9em, height: 0.9em, radius: 2pt, baseline: 0.1em,
+    fill: unc.lighten(80%), stroke: 1.5pt + unc)
+  #h(0.2em) recent work from the lab])
 ```
 
 # Provenance: tximeta for reference + novel
@@ -180,11 +215,7 @@ knitr:
 ```{r}
 se <- importData(coldata, type = "oarfish")
 inspectDigests(se)
-makeLinkedTxpData(digest = novel_digest,
-  indexName = "my_novel_txps",
-  txpData = novel_gr, source = "novel",
-  organism = "Homo sapiens", release = "v1",
-  genome = "GRCh38")
+# ...add or link metadata...
 se <- updateMetadata(se, ranges = TRUE)
 ```
 
@@ -253,23 +284,24 @@ genes <- xp |>
 ```
 
 ```{r}
-exons <- prepare_exons(txdb, dtu_table = dtu,
-    coef_col = "estimate") |>
-  preprocess(coef_col = "estimate")
-events <- find_all_events(exons)
+# <ranges> to <ranges>: "endomorphic"
+events <- exons |> find_all_events()
 
-exons %>%
-  find_se() %>%
+skipped <- exons |>
+  find_se() |>
   flank_upstream(100) %>%
   mutate(intron_seq = get_seq(., "hg38"))
+
+# metadata attached to ranges as columns
+skipped$intron_seq
 ```
 
 # Back to the question: why new syntax?
 
-- Code is cheap; *correct, checkable* code is not
-- Frameworks encode invariants that ad hoc code breaks
-- Provenance and metadata stay in sync automatically
-- Explicit syntax is easier to review, including LLM code
+- tximeta: provenance travels with the data, no silent mismatches
+- plyxp: scoped verbs on standard objects, short and reviewable
+- splicelogic: ranges in, ranges out --- composes with plyranges
+- Write the intent; tested verbs handle the bookkeeping
 
 ```{=typst}
 #place(bottom + right, dy: 1.2cm - 0.5cm,
