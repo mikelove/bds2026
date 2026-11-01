@@ -55,6 +55,10 @@ Source abstract is in `abstract.txt`.
   LLM can write the code?); the "Back to the question" closing slide (which
   also summarizes the three tools) answers it. Slide 3 makes the argument;
   the closing slide gives one bullet per tool as evidence, plus a takeaway.
+- Slide 2 (question) has no title: hand-drawn cartoon
+  `images/florm_human_coding.png` (13.8cm) and the two bullets are both
+  `place()`d (top / bottom), since in normal flow the list kept spilling
+  onto an extra page well before the page was full.
 - Student photos: `#student(file, name)` (circular 3cm photo + name, bottom-right,
   under the sticker column, caption in the bottom margin). Justin Landis on the
   first plyxp slide,

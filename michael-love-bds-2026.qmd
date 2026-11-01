@@ -89,7 +89,7 @@ knitr:
 #v(0.6em)
 #line(length: 40%, stroke: 2pt + rgb("#4B9CD3"))
 #v(0.6em)
-#text(size: 22pt)[*Michael Love*, Beatriz Campillo, Justin Landis]
+#text(size: 22pt)[Michael Love, Beatriz Campillo, Justin Landis]
 #v(0.2em)
 #text(size: 18pt, fill: luma(90))[
   UNC-Chapel Hill, Department of Genetics \
@@ -99,10 +99,13 @@ knitr:
 #pagebreak()
 ```
 
-# A question to start
-
-- An LLM writes good R/python code for RNA-seq in seconds
-- Why build frameworks and new syntax?
+```{=typst}
+#place(top + center, image("images/florm_human_coding.png", height: 13.8cm))
+#place(bottom + left, block[
+  - An LLM writes good #box[R/python] code for RNA-seq in seconds
+  - Why build frameworks and new syntax?
+])
+```
 
 # Why new syntax (for humans or LLMs)?
 
@@ -117,7 +120,7 @@ knitr:
     - Grammar enables precision while maintaining readability, e.g. \
       #detail[“find peaks near DE genes” vs. \
       \
-      `genes |> filter(de) |> promoters() |> join_overlap_inner(peaks, maxgap=250)`] \
+      `genes |> filter(de) |> promoters(...) |> join_overlap_inner(peaks, ...)`] \
     - Composable verbs map meaningfully to many analyses \
       #detail[Standard data classes catch silent bookkeeping & genomics errors]
     - Tested, maintained verbs beat fresh generated code \
@@ -292,7 +295,7 @@ genes <- xp |>
 events <- exons |> find_all_events()
 
 skipped <- exons |>
-  find_se() |>
+  find_skipped_exons() |>
   flank_upstream(100) %>%
   mutate(intron_seq = get_seq(., "hg38"))
 
