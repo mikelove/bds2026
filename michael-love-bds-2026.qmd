@@ -38,7 +38,7 @@ knitr:
 // software names: monospace + deep blue, except inside code chunks
 // (sized by the inline raw rule below)
 #let in-code = state("in-code", false)
-#show regex("\\b(tximeta|plyxp|splicelogic|plyranges|tidyomics|oarfish|bambu|DESeq2|satuRn|TreeTerminus|terminus|treeclimbR|stageR|tidySummarizedExperiment|dplyr|Biostrings|DRIMSeq|edgeR|Biosurfer|rlang|salmon|Snakemake)\\b"): it => context {
+#show regex("\\b(tximeta|plyxp|splicelogic|tapir|plyranges|tidyomics|oarfish|bambu|DESeq2|satuRn|TreeTerminus|terminus|treeclimbR|stageR|tidySummarizedExperiment|dplyr|Biostrings|DRIMSeq|edgeR|Biosurfer|rlang|salmon|Snakemake)\\b"): it => context {
   if in-code.get() { it } else { text(fill: rgb("#2B6CA3"), raw(it.text)) }
 }
 // inline code in slide text: scale up from raw's 0.8em (not inside chunks)
@@ -305,6 +305,10 @@ skipped$intron_seq
 
 # Back to the question: why new syntax?
 
+```{=typst}
+#align(center, image("images/finally.png", height: 6cm))
+```
+
 - tximeta: provenance travels with the data, no silent mismatches
 - plyxp: scoped verbs on standard objects, short and reviewable
 - splicelogic: ranges in, ranges out --- composes with plyranges
@@ -313,16 +317,22 @@ skipped$intron_seq
 ```{=typst}
 #place(bottom + right, dy: 1.2cm - 0.5cm,
   sticker-row("tximeta", "plyxp", "splicelogic", "plyranges", "tidyomics"))
+#v(2.5cm)
 ```
 
 # Acknowledgments
 
 ```{=typst}
+#place(top + right, dx: 2.8cm - 0.7cm, dy: 0.7cm - 1.2cm,
+  image("images/music_florm.png", height: 5cm))
+#v(3cm)
 #grid(columns: (3fr, 2fr), gutter: 1.5em,
   [
     *Love lab, UNC-Chapel Hill*
     - Beatriz Campillo --- splicelogic
     - Justin Landis --- plyxp
+    - Rachel Sharp --- tapir
+    - Isaiah Love --- "florms" 🐦
 
     *Collaborators*
     - Rob Patro and Patro lab --- oarfish

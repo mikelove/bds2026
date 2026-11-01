@@ -59,6 +59,10 @@ Source abstract is in `abstract.txt`.
   `images/florm_human_coding.png` (13.8cm) and the two bullets are both
   `place()`d (top / bottom), since in normal flow the list kept spilling
   onto an extra page well before the page was full.
+- Closing slide: `images/finally.png` (6cm, centered) sits above the
+  bullets; a trailing `#v(2.5cm)` reserves room for the placed sticker row
+  (7cm overlapped it). Acknowledgments: `images/music_florm.png` (5cm) is `place()`d top
+  right with the corner-sticker offsets, and `#v(3cm)` pushes the grid down.
 - Student photos: `#student(file, name)` (circular 3cm photo + name, bottom-right,
   under the sticker column, caption in the bottom margin). Justin Landis on the
   first plyxp slide,
