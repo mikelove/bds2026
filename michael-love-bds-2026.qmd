@@ -100,7 +100,8 @@ knitr:
 ```
 
 ```{=typst}
-#place(top + center, image("images/florm_human_coding.png", height: 13.8cm))
+#place(top + center, dy: -0.9cm,
+  image("images/florm_human_coding.png", height: 13.8cm))
 #place(bottom + left, block[
   - An LLM writes good #box[R/python] code for RNA-seq in seconds
   - Why build frameworks and new syntax?
@@ -116,15 +117,15 @@ knitr:
   set par(leading: 0.5em)
   [
     - Humans read and review code (for now) \
-      #detail[It should be concise and easy to read/comprehend]
+      #detail[Concise and easy to comprehend]
     - Grammar enables precision while maintaining readability, e.g. \
       #detail[“find peaks near DE genes” vs. \
       \
       `genes |> filter(de) |> promoters(...) |> join_overlap_inner(peaks, ...)`] \
     - Composable verbs map meaningfully to many analyses \
       #detail[With standard data classes, this catches silent bookkeeping & genomics errors]
-    - Tested, maintained verbs beat fresh generated code \
-      #detail[And same verbs work consistently across backends]
+    - Tested, maintained verbs safer than freshly generated code \
+      #detail[And the same verbs work consistently across backends]
   ]
 }
 ```

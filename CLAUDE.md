@@ -56,7 +56,7 @@ Source abstract is in `abstract.txt`.
   also summarizes the three tools) answers it. Slide 3 makes the argument;
   the closing slide gives one bullet per tool as evidence, plus a takeaway.
 - Slide 2 (question) has no title: hand-drawn cartoon
-  `images/florm_human_coding.png` (13.8cm) and the two bullets are both
+  `images/florm_human_coding.png` (13.8cm, `dy: -0.9cm` into the top margin) and the two bullets are both
   `place()`d (top / bottom), since in normal flow the list kept spilling
   onto an extra page well before the page was full.
 - Closing slide: `images/finally.png` (6cm, centered) sits above the
