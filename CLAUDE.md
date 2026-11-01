@@ -21,7 +21,8 @@ Source abstract is in `abstract.txt`.
   Don't render unless asked; just edit the `.qmd`.
 - Code chunks always go on their own slide (no bullets alongside). Keep each
   slide to a single page.
-- Text slides: 3-5 bullets of 6-12 words each.
+- Text slides: 3-5 bullets of 6-12 words each. No bold for emphasis in
+  bullets (the user dislikes that style).
 - Diagram, code, and flowchart slides have no words besides the title (no code
   comments either). Talking points go in `#notes[...]` (11pt grey, bottom
   margin, software-name styling suppressed) as notes to self.

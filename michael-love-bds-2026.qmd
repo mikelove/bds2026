@@ -186,7 +186,7 @@ knitr:
 - Quantifiers record a digest of the reference transcripts
 - tximeta matches digests at import, attaches transcript metadata
 - No manual tracking of annotation sources or releases
-- Long-read indices **mix** annotated and novel transcripts
+- Long-read indices mix annotated and novel transcripts
 - tximeta now checks each digest separately
 
 # tximeta: mixed reference workflow
@@ -215,7 +215,11 @@ knitr:
 ```{r}
 se <- importData(coldata, type = "oarfish")
 inspectDigests(se)
-# ...add or link metadata...
+#> index     source  organism release genome ...
+#> annotated GENCODE Homo sa… 48      GRCh38 ...
+#> novel     <NA>    <NA>     <NA>    <NA>   ...
+
+# <add or link metadata in local cache>
 se <- updateMetadata(se, ranges = TRUE)
 ```
 
@@ -267,11 +271,11 @@ genes <- xp |>
 
 - Splicing changes rarely come one event at a time
 - Short-read methods lack full-transcript context for events
-- splicelogic turns **any two transcript sets** into events
+- splicelogic turns any two transcript sets into events
 - Works with any DTU method, or novel vs. annotated
 - Events are genomic ranges, ready for plyranges and Biostrings
 
-# splicelogic: find events, then ask questions
+# splicelogic: events as composable ranges
 
 ```{=typst}
 #sticker("splicelogic")
