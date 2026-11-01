@@ -122,9 +122,9 @@ knitr:
       \
       `genes |> filter(de) |> promoters(...) |> join_overlap_inner(peaks, ...)`] \
     - Composable verbs map meaningfully to many analyses \
-      #detail[Standard data classes catch silent bookkeeping & genomics errors]
+      #detail[With standard data classes, this catches silent bookkeeping & genomics errors]
     - Tested, maintained verbs beat fresh generated code \
-      #detail[Plus: same verbs work across backends]
+      #detail[And same verbs work consistently across backends]
   ]
 }
 ```
