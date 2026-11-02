@@ -38,7 +38,7 @@ knitr:
 // software names: monospace + deep blue, except inside code chunks
 // (sized by the inline raw rule below)
 #let in-code = state("in-code", false)
-#show regex("\\b(tximeta|plyxp|splicelogic|tapir|plyranges|tidyomics|oarfish|bambu|DESeq2|satuRn|TreeTerminus|terminus|treeclimbR|stageR|tidySummarizedExperiment|dplyr|Biostrings|DRIMSeq|edgeR|Biosurfer|rlang|salmon|Snakemake)\\b"): it => context {
+#show regex("\\b(txomics/tapir|tximeta|plyxp|splicelogic|tapir|TAPIR|plyranges|tidyomics|oarfish|bambu|DESeq2|satuRn|TreeTerminus|terminus|treeclimbR|stageR|tidySummarizedExperiment|dplyr|Biostrings|DRIMSeq|edgeR|Biosurfer|rlang|salmon|Snakemake)\\b"): it => context {
   if in-code.get() { it } else { text(fill: rgb("#2B6CA3"), raw(it.text)) }
 }
 // inline code in slide text: scale up from raw's 0.8em (not inside chunks)
@@ -89,7 +89,7 @@ knitr:
 #v(0.6em)
 #line(length: 40%, stroke: 2pt + rgb("#4B9CD3"))
 #v(0.6em)
-#text(size: 22pt)[Michael Love, Beatriz Campillo, Justin Landis]
+#text(size: 22pt)[Michael Love, Justin Landis, Beatriz Campillo, Rachel Sharp]
 #v(0.2em)
 #text(size: 18pt, fill: luma(90))[
   UNC-Chapel Hill, Department of Genetics \
@@ -270,7 +270,7 @@ genes <- xp |>
 
 ```{=typst}
 #sticker("splicelogic")
-#student("beatrizcampillominano", "Beatriz Campillo")
+#student("beatrizcampillo", "Beatriz Campillo")
 ```
 
 - Splicing changes rarely come one event at a time
@@ -303,6 +303,17 @@ skipped <- exons |>
 # metadata attached to ranges as columns
 skipped$intron_seq
 ```
+
+# TAPIR: transcript analysis pipelines in R
+
+```{=typst}
+#student("rachelsharp", "Rachel Sharp")
+```
+
+- A collaboration with Stephanie Hicks's lab at JHU
+- Sowmya Parthiban (Hicks lab) and the Love lab
+- Chapters are being re-organized by Dr. Rachel Sharp
+- Code and docs: [txomics/tapir](https://txomics.github.io/tapir/)
 
 # Back to the question: why new syntax?
 
@@ -346,6 +357,15 @@ skipped$intron_seq
     - Wellcome Trust, Essential Open Source Software for Science (EOSS) \ 313919/Z/24/Z
   ],
 )
+#let lab-photo(file, name) = stack(spacing: 0.25em,
+  box(clip: true, radius: 50%, width: 2.6cm, height: 2.6cm,
+    image("images/" + file + ".jpg", width: 100%)),
+  align(center, text(size: 13pt, fill: luma(90), name)))
+#place(bottom + right, dx: 2.8cm - 0.7cm, dy: 1.2cm - 0.5cm,
+  stack(dir: ltr, spacing: 0.5cm,
+    lab-photo("beatrizcampillo", "Beatriz"),
+    lab-photo("justinlandis", "Justin"),
+    lab-photo("rachelsharp", "Rachel")))
 ```
 
 ```{=typst}

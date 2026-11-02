@@ -26,9 +26,10 @@ Source abstract is in `abstract.txt`.
 - Diagram, code, and flowchart slides have no words besides the title (no code
   comments either). Talking points go in `#notes[...]` (11pt grey, bottom
   margin, software-name styling suppressed) as notes to self.
-- Max 13 slides: title, question, why-new-syntax (bullets with smaller grey
+- Max 14 slides: title, question, why-new-syntax (bullets with smaller grey
   `#detail[...]` second lines), workflow, tximeta (concept, diagram, code),
-  plyxp (concept, code), splicelogic (concept, code), back-to-question (merged
+  plyxp (concept, code), splicelogic (concept, code), TAPIR (collaboration with Hicks lab, JHU;
+  Rachel Sharp photo), back-to-question (merged
   with summary, sticker row), acknowledgments. One code slide per tool showing
   its key operations; talking points live in `#notes[...]`.
 
@@ -63,10 +64,12 @@ Source abstract is in `abstract.txt`.
   bullets; a trailing `#v(2.5cm)` reserves room for the placed sticker row
   (7cm overlapped it). Acknowledgments: `images/music_florm.png` (5cm) is `place()`d top
   right with the corner-sticker offsets, and `#v(3cm)` pushes the grid down.
+  A `lab-photo()` row (Beatriz, Justin, Rachel; 2.6cm circles, first names)
+  is `place()`d bottom right; inside the grid's right column it spilled to a new page.
 - Student photos: `#student(file, name)` (circular 3cm photo + name, bottom-right,
   under the sticker column, caption in the bottom margin). Justin Landis on the
   first plyxp slide,
-  Beatriz Campillo on the splicelogic slide; jpgs copied into `images/`.
+  Beatriz Campillo on the splicelogic slide, Rachel Sharp on the TAPIR slide; jpgs copied into `images/`.
 - Content slide 2 is a workflow diagram (Typst `#grid` of `stage()` boxes; our
   tools highlighted in UNC blue) that replaced the original motivation slide.
   `stage(title, tools, desc)` = bold title, tools line, smaller grey
