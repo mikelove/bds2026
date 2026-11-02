@@ -341,8 +341,8 @@ skipped$intron_seq
 #grid(columns: (3fr, 2fr), gutter: 1.5em,
   [
     *Love lab, UNC-Chapel Hill*
-    - Beatriz Campillo --- splicelogic
     - Justin Landis --- plyxp
+    - Beatriz Campillo --- splicelogic
     - Rachel Sharp --- tapir
     - Isaiah Love --- "florms" 🐦
 
