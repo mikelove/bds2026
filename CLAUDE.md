@@ -98,7 +98,7 @@ Source abstract is in `abstract.txt`.
 
 - plyxp requires wrapping a SummarizedExperiment with `new_plyxp(se)` before
   dplyr verbs. Contexts: `rows()`, `cols()`; pronouns `.assays_asis`, `.cols`, etc.
-- All chunks are illustrative only: `execute: eval: false` globally (Quarto is
+- All chunks are illustrative only: `execute: eval: false` globally plus `#| eval: false` in each chunk so Positron/VS Code don't treat them as runnable (Quarto is
   used just for syntax highlighting). No setup or toy-data chunks.
 
 ## Layout notes
@@ -120,3 +120,7 @@ Source abstract is in `abstract.txt`.
   Keep code lines under ~50 characters; put comments on their own lines.
   - All raw text (code chunks, inline code, styled software names) uses Fira Code
   via a global `#show raw: set text(font: "Fira Code")` in the first Typst block.
+- Per-slide code overrides: `#code-size.update(20pt)` / `#code-width.update(72%)`
+  in a Typst block before the chunk, reset to 24pt / 100% after. Used on the
+  tximeta code slide, with `images/inspector.png` (5.6cm, ~1/3 slide height)
+  `place()`d right + horizon.

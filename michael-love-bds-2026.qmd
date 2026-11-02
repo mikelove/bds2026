@@ -45,14 +45,19 @@ knitr:
 #show raw.where(block: false): it => context {
   if in-code.get() { it } else { text(size: 1.15em, it) }
 }
+// per-slide overrides: #code-size.update(20pt), #code-width.update(70%)
+#let code-size = state("code-size", 24pt)
+#let code-width = state("code-width", 100%)
 #let Skylighting(fill: none, number: false, start: 1, sourcelines) = {
   in-code.update(true)
-  set text(size: 24pt)
-  set par(leading: 0.5em)
-  let blocks = []
-  for ln in sourcelines { blocks = blocks + ln + EndLine() }
-  block(fill: rgb("#f1f3f5"), width: 100%, inset: 6pt, radius: 3pt,
-    breakable: false, blocks)
+  context {
+    set text(size: code-size.get())
+    set par(leading: 0.5em)
+    let blocks = []
+    for ln in sourcelines { blocks = blocks + ln + EndLine() }
+    block(fill: rgb("#f1f3f5"), width: code-width.get(), inset: 6pt,
+      radius: 3pt, breakable: false, blocks)
+  }
   in-code.update(false)
 }
 #let sticker-img(name, h) = image("images/" + name + ".png", height: h)
@@ -159,7 +164,7 @@ knitr:
   rows: 4.6cm,
   column-gutter: 4pt,
   block(height: 100%, grid(rows: (1fr, 1fr), row-gutter: gap,
-    stage("Annotate", none)[reference + filtering],
+    stage("Download", none)[annotated reference transcripts],
     stage("Detect", none)[novel transcripts])),
   block(height: 100%, grid(rows: (1fr, 1fr), row-gutter: gap,
     align(center + horizon, rotate(30deg, arrow-glyph)),
@@ -205,7 +210,7 @@ knitr:
   linkedTxome / linkedTxpData; `updateMetadata()` attaches what matches.]
 ```
 
-# tximeta: import, inspect, link, update
+# tximeta: inspect, link, and update metadata
 
 ```{=typst}
 #sticker("tximeta")
@@ -214,9 +219,13 @@ knitr:
   matches GENCODE v48, novel has no match. `makeLinkedTxpData()`: register
   novel transcripts once in the file cache. `updateMetadata(ranges = TRUE)`:
   metadata + ranges for both sets. Still open: subsets of the annotation.]
+#code-size.update(20pt)
+#code-width.update(72%)
+#place(right + horizon, image("images/inspector.png", height: 5.6cm))
 ```
 
 ```{r}
+#| eval: false
 se <- importData(coldata, type = "oarfish")
 inspectDigests(se)
 #> index     source  organism release genome ...
@@ -225,6 +234,11 @@ inspectDigests(se)
 
 # <add or link metadata in local cache>
 se <- updateMetadata(se, ranges = TRUE)
+```
+
+```{=typst}
+#code-size.update(24pt)
+#code-width.update(100%)
 ```
 
 # plyxp: a grammar for annotated matrices
@@ -253,6 +267,7 @@ se <- updateMetadata(se, ranges = TRUE)
 ```
 
 ```{r}
+#| eval: false
 xp <- new_plyxp(se) |>
   mutate(
     cts_bp = counts / .rows$tx_length,
@@ -292,6 +307,7 @@ genes <- xp |>
 ```
 
 ```{r}
+#| eval: false
 # <ranges> to <ranges>: "endomorphic"
 events <- exons |> find_all_events()
 
