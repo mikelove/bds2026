@@ -13,7 +13,7 @@ Source abstract is in `abstract.txt`.
   `~/proj/mikelove.github.io/assets/`, which also has lab headshots and other logos.
   Helpers defined in the first Typst block: `#sticker("name")` (3cm, 0.7cm from page top and right edges
   of a slide) and `#sticker-row(..names, h: 3cm)` (title slide: tximeta, plyxp, splicelogic;
-  summary slide adds plyranges, tidyomics at the end).
+  summary slide adds plyranges, nullranges, tidyomics at the end).
 
 ## Workflow
 
@@ -26,10 +26,11 @@ Source abstract is in `abstract.txt`.
 - Diagram, code, and flowchart slides have no words besides the title (no code
   comments either). Talking points go in `#notes[...]` (11pt grey, bottom
   margin, software-name styling suppressed) as notes to self.
-- Max 14 slides: title, question, why-new-syntax (bullets with smaller grey
+- Max 15 slides: title, question, why-new-syntax (bullets with smaller grey
   `#detail[...]` second lines), workflow, tximeta (concept, diagram, code),
-  plyxp (concept, code), splicelogic (concept, code), TAPIR (collaboration with Hicks lab, JHU;
-  Rachel Sharp photo), back-to-question (merged
+  plyxp (concept, code), splicelogic (concept, code, plyxp-stats-to-events code), TAPIR (collaboration with Hicks lab, JHU;
+  Rachel Sharp photo; `images/tapir.png` book screenshot, 6cm centered above
+  the bullets), back-to-question (merged
   with summary, sticker row), acknowledgments. One code slide per tool showing
   its key operations; talking points live in `#notes[...]`.
 
@@ -91,8 +92,8 @@ Source abstract is in `abstract.txt`.
   Isoform aggregation is mentioned only via the plyxp group_by/summarize code.
 - Ecosystem tools to mention: upstream oarfish, bambu, AnVIL/Terra; downstream
   plyranges, DESeq2/satuRn (DEXSeq removed); related aggregation methods TreeTerminus/terminus,
-  treeclimbR, stageR. Not chosen: IsoQuant/FLAIR/StringTie2, fishpond/swish,
-  nullranges.
+  treeclimbR, stageR. Not chosen: IsoQuant/FLAIR/StringTie2, fishpond/swish.
+  nullranges appears only as a sticker on the closing slide.
 
 ## R code
 
@@ -124,3 +125,10 @@ Source abstract is in `abstract.txt`.
   in a Typst block before the chunk, reset to 24pt / 100% after. Used on the
   tximeta code slide, with `images/inspector.png` (5.6cm, ~1/3 slide height)
   `place()`d right + horizon.
+- Third splicelogic slide: only the plyxp `summarize()` of `piu` (percent
+  isoform usage) mean/SD per condition, then the `preprocess(additional_columns
+  = ...)` call on exons (from `refs/demo.R`; the per-gene piu step and tx_id
+  lookup live in the notes). 20pt code, then a small grey right-aligned link to
+  txomics.github.io/tapir/annotate-plyxp-splicelogic.html. The link body is a
+  `box()` with `in-code.update(true/false)` around it: without that, the
+  software-name regex splits it and the link highlights word by word.

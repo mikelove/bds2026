@@ -38,7 +38,7 @@ knitr:
 // software names: monospace + deep blue, except inside code chunks
 // (sized by the inline raw rule below)
 #let in-code = state("in-code", false)
-#show regex("\\b(txomics/tapir|tximeta|plyxp|splicelogic|tapir|TAPIR|plyranges|tidyomics|oarfish|bambu|DESeq2|satuRn|TreeTerminus|terminus|treeclimbR|stageR|tidySummarizedExperiment|dplyr|Biostrings|DRIMSeq|edgeR|Biosurfer|rlang|salmon|Snakemake)\\b"): it => context {
+#show regex("\\b(txomics/tapir|tximeta|tximport|plyxp|tidySE|splicelogic|tapir|TAPIR|plyranges|tidyomics|oarfish|bambu|DESeq2|satuRn|TreeTerminus|terminus|treeclimbR|stageR|tidySummarizedExperiment|dplyr|Biostrings|DRIMSeq|edgeR|Biosurfer|rlang|salmon|Snakemake)\\b"): it => context {
   if in-code.get() { it } else { text(fill: rgb("#2B6CA3"), raw(it.text)) }
 }
 // inline code in slide text: scale up from raw's 0.8em (not inside chunks)
@@ -48,15 +48,47 @@ knitr:
 // per-slide overrides: #code-size.update(20pt), #code-width.update(70%)
 #let code-size = state("code-size", 24pt)
 #let code-width = state("code-width", 100%)
+// per-slide brackets right of a chunk: #code-brackets.update(((1, 10, "A"), ...))
+// with (first line, last line, label); reset to none after the chunk
+#let code-brackets = state("code-brackets", none)
+#let code-bracket(h, label) = {
+  let c = rgb("#13294B")
+  let s = 1.5pt + c
+  stack(dir: ltr, spacing: 0.3cm,
+    box(width: 0.35cm, height: h, stroke: (top: s, right: s, bottom: s)),
+    box(height: h, align(horizon, text(size: 18pt, fill: c, label))))
+}
 #let Skylighting(fill: none, number: false, start: 1, sourcelines) = {
   in-code.update(true)
   context {
-    set text(size: code-size.get())
+    let sz = code-size.get()
+    set text(size: sz)
     set par(leading: 0.5em)
     let blocks = []
     for ln in sourcelines { blocks = blocks + ln + EndLine() }
-    block(fill: rgb("#f1f3f5"), width: code-width.get(), inset: 6pt,
-      radius: 3pt, breakable: false, blocks)
+    let br = code-brackets.get()
+    if br == none {
+      block(fill: rgb("#f1f3f5"), width: code-width.get(), inset: 6pt,
+        radius: 3pt, breakable: false, blocks)
+    } else {
+      // height of source lines a..b (1-based, inclusive) as rendered
+      let H(a, b) = measure({
+        set text(size: sz)
+        set par(leading: 0.5em)
+        sourcelines.slice(a - 1, b).join(EndLine())
+      }).height
+      let aside = box(width: 4cm, {
+        for (a, b, label) in br {
+          let y = if a == 1 { 0pt } else { H(1, a) - H(a, a) }
+          place(top + left, dy: 6pt + y - 2pt,
+            code-bracket(H(a, b) + 4pt, label))
+        }
+      })
+      grid(columns: (code-width.get(), auto), column-gutter: 0.3cm,
+        block(fill: rgb("#f1f3f5"), width: 100%, inset: 6pt,
+          radius: 3pt, breakable: false, blocks),
+        aside)
+    }
   }
   in-code.update(false)
 }
@@ -118,19 +150,19 @@ knitr:
 ```{=typst}
 #let detail(body) = text(size: 16pt, fill: luma(110), body)
 #{
-  set list(spacing: 1em)
+  set enum(spacing: 1em)
   set par(leading: 0.5em)
   [
-    - Humans read and review code (for now) \
+    1. Humans read and review code (for now) \
       #detail[Concise and easy to comprehend]
-    - Grammar enables precision while maintaining readability, e.g. \
+    2. Grammar enables precision while maintaining readability, e.g. \
       #detail[“find peaks near DE genes” vs. \
       \
-      `genes |> filter(de) |> promoters(...) |> join_overlap_inner(peaks, ...)`] \
-    - Composable verbs map meaningfully to many analyses \
-      #detail[With standard data classes, this catches silent bookkeeping & genomics errors]
-    - Tested, maintained verbs safer than freshly generated code \
-      #detail[And the same verbs work consistently across backends]
+      `genes |> filter(de) |> promoters(...) |> join_overlap_inner(peaks, ...)`]
+    3. Composable verbs map meaningfully to many analyses \
+      #detail[With standard data classes, catches silent bookkeeping & genomics errors]
+    4. Tested, maintained verbs safer than freshly generated code \
+      #detail[Same verbs work consistently across backends]
   ]
 }
 ```
@@ -164,20 +196,20 @@ knitr:
   rows: 4.6cm,
   column-gutter: 4pt,
   block(height: 100%, grid(rows: (1fr, 1fr), row-gutter: gap,
-    stage("Download", none)[annotated reference transcripts],
-    stage("Detect", none)[novel transcripts])),
+    stage("Define", none)[annotated transcripts],
+    stage("Detect", none)[_de novo_ / novel transcripts])),
   block(height: 100%, grid(rows: (1fr, 1fr), row-gutter: gap,
     align(center + horizon, rotate(30deg, arrow-glyph)),
     align(center + horizon, rotate(-30deg, arrow-glyph)))),
-  stage("Quantify")[oarfish bambu][on cluster or cloud (AnVIL)],
+  stage("Quantify")[oarfish bambu][from genome or txome alignment, cloud/AnVIL],
   arrow,
-  stage("Import", ours: true)[tximeta][automatic provenance of annotated + novel],
+  stage("Import", ours: true)[tximport tximeta][automatic provenance of annotated + novel],
   arrow,
-  stage("Manipulate", ours: true)[plyxp][tidy verbs applied to standard data objects],
+  stage("Explore", ours: true)[plyxp tidySE][tidy verbs applied to standard data objects],
   arrow,
-  stage("Test")[DESeq2 satuRn][assessing differences across samples],
+  stage("Compare")[DESeq2 satuRn][assessing differences across samples],
   arrow,
-  stage("Interpret", ours: true)[splicelogic plyranges][deducing causes and consequences],
+  stage("Interpret", ours: true)[splicelogic plyranges][deducing splicing causes & consequences],
 )
 #v(0.8em)
 #align(center, text(size: 13pt, fill: luma(80))[
@@ -186,17 +218,47 @@ knitr:
   #h(0.2em) recent work from the lab])
 ```
 
-# Provenance: tximeta for reference + novel
+# Metadata complications
 
 ```{=typst}
 #sticker("tximeta")
+#notes[When you incorporate novel transcripts, you end up with mixed metadata, some information you have just for novel, some only for annotated. Bookkeeping issues arise from this.]
+#code-size.update(13pt)
+#code-width.update(72%)
+#code-brackets.update(((1, 10, "Annotated"), (12, 23, "Novel")))
 ```
 
-- Quantifiers record a digest of the reference transcripts
-- tximeta matches digests at import, attaches transcript metadata
-- No manual tracking of annotation sources or releases
-- Long-read indices mix annotated and novel transcripts
-- tximeta now checks each digest separately
+```bash
+chr10 de-novo-tool transcript 3779047 3785193 . - .
+  gene_id "ENSG00000067082.14"; transcript_id "ENST00000497571.5";
+chr10 de-novo-tool exon 3779047 3779590 . - 0 ...
+chr10 de-novo-tool exon 3780106 3780229 . - 0 ...
+chr10 de-novo-tool exon 3781641 3782214 . - 0 ...
+chr10 de-novo-tool transcript 5094414 5107680 . + .
+  gene_id "ENSG00000196139.13"; transcript_id "ENST00000380554.4";
+chr10 de-novo-tool exon 5094414 5094528 . + 0 ...
+chr10 de-novo-tool exon 5096410 5096577 . + 0 ...
+chr10 de-novo-tool exon 5097434 5097550 . + 0 ...
+
+chr10 de-novo-tool transcript 89293545 89535556 . - .
+  gene_id "chr10:89293000";
+  transcript_id "8327445e-4522-47f2-a2dd-af1b031c1917_chr10:89293000";
+chr10 de-novo-tool exon 89293545 89293668 . - 0 ...
+chr10 de-novo-tool exon 89412791 89412922 . - 0 ...
+chr10 de-novo-tool exon 89436060 89436319 . - 0 ...
+chrY de-novo-tool transcript 12904831 12920478 . + .
+  gene_id "ENSG00000067048.16";
+  transcript_id "141285fb-d028-4740-a9d9-f04a28fbaef1";
+chrY de-novo-tool exon 12904831 12904981 . + 4879 ...
+chrY de-novo-tool exon 12907537 12907594 . + 4879 ...
+chrY de-novo-tool exon 12909360 12909407 . + 4879 ...
+```
+
+```{=typst}
+#code-size.update(24pt)
+#code-width.update(100%)
+#code-brackets.update(none)
+```
 
 # tximeta: mixed reference workflow
 
@@ -205,9 +267,7 @@ knitr:
 #align(center, image("images/mixed-ref-diagram.png", height: 10.5cm))
 #notes[oarfish records a digest per sub-index: annotated (e.g. GENCODE) and
   novel (e.g. bambu, de novo, spike-ins, fusions); salmon via a Snakemake rule
-  writing `mixed_ref_digests.json`. `importData()` reads counts + digests;
-  `inspectDigests()` checks each against the digest table and
-  linkedTxome / linkedTxpData; `updateMetadata()` attaches what matches.]
+  writing `mixed_ref_digests.json`]
 ```
 
 # tximeta: inspect, link, and update metadata
@@ -246,6 +306,7 @@ se <- updateMetadata(se, ranges = TRUE)
 ```{=typst}
 #sticker("plyxp")
 #student("justinlandis", "Justin Landis")
+#align(center, image("images/sumexp.png", height: 5.5cm))
 ```
 
 - SummarizedExperiment links counts to transcript and sample data
@@ -320,10 +381,47 @@ skipped <- exons |>
 skipped$intron_seq
 ```
 
+# splicelogic: carry isoform stats to events
+
+```{=typst}
+#sticker("splicelogic")
+#notes[Any statistic computed on the transcript count table with plyxp can
+  ride along to events. Here `piu` (percent isoform usage, computed per gene
+  with `group_by(rows(gene_id))`) is summarized to mean and SD per condition.
+  After looking these up by `tx_id` onto the exons,
+  `preprocess(additional_columns = ...)` carries them into the events
+  (`event_mean_ctl`, etc.): skipped exon goes .8 -> .2 with treatment.]
+#code-size.update(20pt)
+```
+
+```{r}
+#| eval: false
+iso <- xp |>
+  group_by(cols(condition)) |>
+  summarize(mean = rowMeans(piu), sd = rowSds(piu),
+            cols(.samples = unique(condition)))
+
+exons <- exons |>
+  preprocess(
+    coef_col = "coefficient",
+    additional_columns = c("pvalue",
+      "mean_ctl", "mean_trt", "sd_ctl", "sd_trt"))
+```
+
+```{=typst}
+#in-code.update(true)
+#align(right, link("https://txomics.github.io/tapir/annotate-plyxp-splicelogic.html",
+  box(text(size: 14pt, fill: luma(110), font: "Fira Code",
+    "txomics.github.io/tapir/annotate-plyxp-splicelogic"))))
+#in-code.update(false)
+#code-size.update(24pt)
+```
+
 # TAPIR: transcript analysis pipelines in R
 
 ```{=typst}
 #student("rachelsharp", "Rachel Sharp")
+#align(center, image("images/tapir.png", height: 6cm))
 ```
 
 - A collaboration with Stephanie Hicks's lab at JHU
@@ -344,7 +442,7 @@ skipped$intron_seq
 
 ```{=typst}
 #place(bottom + right, dy: 1.2cm - 0.5cm,
-  sticker-row("tximeta", "plyxp", "splicelogic", "plyranges", "tidyomics"))
+  sticker-row("tximeta", "plyxp", "splicelogic", "plyranges", "nullranges", "tidyomics"))
 #v(2.5cm)
 ```
 
