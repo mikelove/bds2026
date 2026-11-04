@@ -38,7 +38,7 @@ knitr:
 // software names: monospace + deep blue, except inside code chunks
 // (sized by the inline raw rule below)
 #let in-code = state("in-code", false)
-#show regex("\\b(txomics/tapir|tximeta|tximport|plyxp|tidySE|splicelogic|tapir|TAPIR|plyranges|tidyomics|salmon|oarfish|bambu|DESeq2|satuRn)\\b"): it => context {
+#show regex("\\b(txomics/tapir|tximeta|tximport|plyxp|tidySE|splicelogic|treeClust|tapir|TAPIR|plyranges|tidyomics|salmon|oarfish|bambu|DESeq2|satuRn)\\b"): it => context {
   if in-code.get() { it } else { text(fill: rgb("#2B6CA3"), raw(it.text)) }
 }
 // inline code in slide text: scale up from raw's 0.8em (not inside chunks)
@@ -304,11 +304,15 @@ se <- updateMetadata(se, ranges = TRUE)
   sticker-img("tidyomics", 3cm))
 #student("justinlandis", "Justin Landis")
 #align(center, image("images/plyxp-contexts.png", height: 9cm))
+// context colors: rows purple, cols dark orange, assays dark green
+#let c-rows(s) = text(fill: rgb("#6A3D9A"), raw(s))
+#let c-cols(s) = text(fill: rgb("#D2691E"), raw(s))
+#let c-assays(s) = text(fill: rgb("#2E7D32"), raw(s))
 #align(center, box(align(left)[
   #set text(size: 16pt)
   - plyxp brings _dplyr_ verbs to _SummarizedExperiment_ objects, efficiently
-  - Each expression is scoped to a context: _assays_, `rows()`, or `cols()`
-  - Pronouns `.assays`, `.rows`, `.cols` reach across contexts
+  - Each expression is scoped to a context: #c-assays("assays"), #c-rows("rows()"), or #c-cols("cols()")
+  - Pronouns #c-assays(".assays"), #c-rows(".rows"), #c-cols(".cols") reach across contexts
   - We are looking to support _AnnData_
 ]))
 ```
@@ -321,13 +325,11 @@ se <- updateMetadata(se, ranges = TRUE)
 
 ```{r}
 #| eval: false
-xp <- new_plyxp(se) |>
+xp <- new_plxyp(se) |>
   mutate(
-
     scaled_cts = counts / .cols$size_factor,
     rows(ave = rowMeans(.assays_asis$scaled_cts)),
     rows(ave2 = map_dbl(.assays$scaled_cts, mean))
-
   ) |>
   filter(rows(ave > 10), cols(batch != "b3"))
 
@@ -336,28 +338,40 @@ genes <- xp |>
   summarize(counts = colSums(counts))
 ```
 
-# plyxp: count splitting
+# FP control for aggregation: count splitting
 
 ```{=typst}
 #sticker("plyxp")
-#code-size.update(20pt)
-#code-width.update(55%)
-#place(right + horizon, dx: -0.8cm,
-  rect(width: 8cm, height: 6.6cm, radius: 3pt,
-    stroke: (paint: luma(160), dash: "dashed"),
-    align(center + horizon, text(size: 16pt, fill: luma(130), [plot TBD]))))
+#code-size.update(16pt)
+#code-width.update(60%)
+// split1/split2 share a pixel scale (-1..1 = 680px); zero line at px 463 vs 381,
+// so split1 is 840/768 as wide and the others are padded left by 82px;
+// split1 gets 10px right padding since the stack right-aligns its children
+#let k = 8cm / 768
+#place(horizon + right, dx: -1cm, dy: 1.15cm,
+  stack(spacing: 0.2cm,
+    pad(right: 10 * k, image("images/split1.png", width: 840 * k)),
+    pad(left: 82 * k, image("images/split2.png", width: 768 * k)),
+    pad(left: 82 * k, image("images/split3.png", width: 768 * k))))
+// shift the (vertically centered) code down to match the plots' dy
+#v(1.6cm)
 ```
+
+Aggregate counts from similar transcripts:
 
 ```{r}
 #| eval: false
-thin <- function(x, eps = 0.5) {
-  y <- rbinom(length(x), x, eps)
-  matrix(y, nrow = nrow(x))
-}
-
 split <- xp |>
-  mutate(train = thin(counts),
+  mutate(train = rbinom(n(), counts, 0.5),
          test = counts - train)
+
+tree <- split |>
+  group_by(rows(gene_id)) |>
+  mutate(rows(nodes = exons |> cluster_data()))
+
+inner_nodes <- tree |>
+  group_by_nodes(rows(inner_nodes(nodes))) |>
+  summarize(across(everything(), colSums))
 ```
 
 ```{=typst}
@@ -370,6 +384,7 @@ split <- xp |>
 ```{=typst}
 #sticker("splicelogic")
 #student("beatrizcampillo", "Beatriz Campillo")
+#v(1cm)
 #align(center, image("images/justin-example.png", height: 9cm))
 #align(center, box(align(left)[
   - Splicing changes rarely come one event at a time
@@ -394,7 +409,7 @@ skipped <- exons |>
   flank_upstream(100) %>%
   mutate(intron_seq = get_seq(., "hg38"))
 
-# metadata attached to ranges as columns
+# results attached to ranges as columns
 skipped$intron_seq
 ```
 
@@ -411,42 +426,12 @@ skipped$intron_seq
     image("images/gtex-nucleotides.png", width: 8.2cm)))
 #v(0.3cm)
 #grid(columns: (1fr, auto), align: horizon,
-  text(size: 11pt, fill: luma(90))[Data: Glinos _et al._, (GTEX v9) _Nature_ 608, 353--359 (2022),
+  text(size: 11pt, fill: luma(90))[Reanalysis of: Glinos _et al._, (GTEX v9) _Nature_ 608, 353--359 (2022),
     #link("https://doi.org/10.1038/s41586-022-05035-y")[doi:10.1038/s41586-022-05035-y]],
   stack(dir: ltr, spacing: 0.3cm,
     align(horizon, text(size: 13pt, fill: luma(90))[analyzed on]),
     image("images/anvil.png", height: 1.1cm),
     image("images/terra.png", height: 1.1cm)))
-```
-
-# splicelogic: carry isoform stats to events
-
-```{=typst}
-#sticker("splicelogic")
-#code-size.update(20pt)
-```
-
-```{r}
-#| eval: false
-iso <- xp |>
-  group_by(cols(condition)) |>
-  summarize(mean = rowMeans(piu), sd = rowSds(piu),
-            cols(.samples = unique(condition)))
-
-exons <- exons |>
-  preprocess(
-    coef_col = "coefficient",
-    additional_columns = c("pvalue",
-      "mean_ctl", "mean_trt", "sd_ctl", "sd_trt"))
-```
-
-```{=typst}
-#in-code.update(true)
-#align(right, link("https://txomics.github.io/tapir/annotate-plyxp-splicelogic.html",
-  box(text(size: 14pt, fill: luma(110), font: "Fira Code",
-    "txomics.github.io/tapir/annotate-plyxp-splicelogic"))))
-#in-code.update(false)
-#code-size.update(24pt)
 ```
 
 # Modular tools and functions
@@ -463,11 +448,40 @@ exons <- exons |>
   image("images/tapir.png", height: 9cm),
   [
     #set text(size: 16pt)
-    #align(center, image("images/lego.jpg", height: 4.5cm))
     - Collaboration with Stephanie Hicks (JHU), Sowmya Parthiban (JHU)
     - Chapters are being re-organized now by _Dr. Rachel Sharp_
     - #link("https://txomics.github.io/tapir/")[txomics/tapir]
   ])
+```
+
+# Compute and propagate custom stats
+
+```{=typst}
+#sticker("splicelogic")
+#place(top + right, dx: 2.8cm - 0.7cm - 3.1cm, dy: 0.7cm - 1.2cm,
+  sticker-img("plyxp", 3cm))
+#align(center, image("images/lego.jpg", height: 4.5cm))
+#code-size.update(20pt)
+```
+
+```{r}
+#| eval: false
+usage_per_group <- xp |>
+  group_by(cols(condition)) |>
+  summarize(mean = rowMeans(usage), sd = rowSds(usage))
+
+exons |>
+  preprocess(..., additional_columns = c("pvalue", ...)) |>
+```
+
+```{=typst}
+#in-code.update(true)
+#place(bottom + center, text(size: 16pt, fill: luma(110))[View at
+  #link("https://txomics.github.io/tapir/annotate-plyxp-splicelogic.html",
+    box(text(font: "Fira Code",
+      "txomics.github.io/tapir/annotate-plyxp-splicelogic")))])
+#in-code.update(false)
+#code-size.update(24pt)
 ```
 
 # Back to the question: why new syntax?
@@ -479,7 +493,7 @@ exons <- exons |>
 - tximeta: provenance travels with the data
 - plyxp: _dplyr_ verbs on standard objects
 - splicelogic: ranges in, ranges out: composes with plyranges
-- Tested verbs handle the bookkeeping
+- Tested verbs and classes handle the bookkeeping
 
 ```{=typst}
 #place(bottom + right, dy: 1.2cm - 0.5cm,
@@ -492,7 +506,11 @@ exons <- exons |>
 ```{=typst}
 #place(top + right, dx: 2.8cm - 0.7cm, dy: 0.7cm - 1.2cm,
   image("images/music_florm.png", height: 5cm))
-#v(3cm)
+#v(2.6cm)
+#[
+#set text(size: 16pt)
+#set list(spacing: 0.5em)
+#set par(spacing: 0.8em)
 #grid(columns: (3fr, 2fr), gutter: 1.5em,
   [
     *Love lab, UNC-Chapel Hill*
@@ -503,18 +521,23 @@ exons <- exons |>
 
     *Collaborators*
     - Zahra Zare Jousheghani --- oarfish
-    - Rob Patro and Patro lab
+    - Rob Patro and Patro lab members
     - Charlotte Soneson --- tximeta
     - Stefano Mangiola et al. --- tidyomics
+
+    *Software links*
+    - #link("https://github.com/thelovelab")[#text(fill: rgb("#2B6CA3"))[github.com/thelovelab]]
+    - #in-code.update(true)#link("https://github.com/tidyomics")[#text(fill: rgb("#2B6CA3"))[github.com/tidyomics]]#in-code.update(false)
+    - #link("https://mikelove.github.io/pages/software.html")[#text(fill: rgb("#2B6CA3"))[mikelove.github.io]] `|>` software
+    - #in-code.update(true)#link("https://txomics.github.io/tapir")[#text(fill: rgb("#2B6CA3"))[txomics/tapir]]#in-code.update(false)
   ],
   [
     *Funding*
     - NIH / NHGRI \ R01-HG009937
     - Wellcome Trust, Essential Open Source Software for Science (EOSS) \ 313919/Z/24/Z
-
-    #link("https://mikelove.github.io/pages/software.html")[#text(fill: rgb("#2B6CA3"))[Love Lab software]]
   ],
 )
+]
 #let lab-photo(file, name) = stack(spacing: 0.25em,
   box(clip: true, radius: 50%, width: 2.6cm, height: 2.6cm,
     image("images/" + file + ".jpg", width: 100%)),

@@ -27,7 +27,14 @@ Source abstract is in `abstract.txt`.
   comments either). No speaker notes in the `.qmd` (the user removed them).
 - Max 19 slides: title, question, why-new-syntax (bullets with smaller grey
   `#detail[...]` second lines), workflow, tximeta (concept, diagram, code),
-  plyxp (concept, code, count-splitting code + dashed "plot TBD" placeholder box),
+  plyxp (concept, code, count-splitting code (16pt, 60% width; plot stack `place(horizon + right,
+  dx: -1cm, dy: 1.15cm)` and `#v(1.6cm)` before the chunk so code and plots share a
+  vertical center (measured on a render): split with `rbinom(n(), counts, 0.5)`,
+  per-gene transcript tree via treeClustDemo `simple_range() |> cluster_data() |>
+  tree_vctr()`, then `group_by_nodes(rows(inner_nodes(nodes)))` + `colSums`; tested
+  on treeClustDemo `glinos`) + `images/split1-3.png` stacked
+  vertically (split2/3 8cm wide; split1 840/768 as wide and offset via `pad()` so
+  the x axes line up: both PNGs use 680px for -1..1, zero at px 463 vs 381) (title "Error control via count splitting" kept short to fit one line), `place()`d bottom right with `dx: -1cm`),
   splicelogic (concept, code, GTEx PTBP1 results, plyxp-stats-to-events code), "Modular tools and
   functions" (`images/lego.jpg`, 12.5cm, no text), TAPIR (collaboration with Hicks lab, JHU;
   Rachel Sharp photo; `images/tapir.png` book screenshot, 9cm, left of 16pt
@@ -72,7 +79,7 @@ Source abstract is in `abstract.txt`.
   under the sticker column, caption in the bottom margin). Justin Landis on the
   first plyxp slide (with `images/plyxp-contexts.png`, 9cm centered above 16pt bullets in a `#[...]` block;
   a tidyomics sticker is `place()`d 3.1cm left of the plyxp corner sticker, this slide only),
-  Beatriz Campillo on the splicelogic slide (with `images/justin-example.png`, 11cm (max that fits) centered above the bullets), Rachel Sharp on the TAPIR slide; jpgs copied into `images/`.
+  Beatriz Campillo on the splicelogic slide (with `images/justin-example.png`, 9cm, `#v(1cm)` gap below the title, centered above the bullets), Rachel Sharp on the TAPIR slide; jpgs copied into `images/`.
 - Content slide 2 is a workflow diagram (Typst `#grid` of `stage()` boxes; our
   tools highlighted in UNC blue) that replaced the original motivation slide.
   `stage(title, tools, desc)` = bold title, tools line, smaller grey
@@ -133,7 +140,20 @@ Source abstract is in `abstract.txt`.
 - Third splicelogic slide: only the plyxp `summarize()` of `piu` (percent
   isoform usage) mean/SD per condition, then the `preprocess(additional_columns
   = ...)` call on exons (from `refs/demo.R`; the per-gene piu step and tx_id
-  lookup are left out). 20pt code, then a small grey right-aligned link to
+  lookup are left out). 20pt code, then "View at <link>" (16pt grey, link in Fira Code) `place()`d bottom center, linking to
   txomics.github.io/tapir/annotate-plyxp-splicelogic.html. The link body is a
   `box()` with `in-code.update(true/false)` around it: without that, the
   software-name regex splits it and the link highlights word by word.
+- "Compute and propagate custom stats" slide (plyxp `summarize()` per group ->
+  splicelogic `preprocess(additional_columns = ...)`): plyxp + splicelogic
+  corner stickers side by side (title kept short so it clears both), small
+  `images/lego.jpg` (4.5cm) centered above the code chunk.
+- Acknowledgments grid is wrapped in `#[ ... ]` with 16pt text, `list(spacing: 0.5em)`,
+  `par(spacing: 0.8em)`, after `#v(2.6cm)`; the left column ends with two link bullets
+  (github.com/thelovelab, mikelove.github.io -> /pages/software.html, txomics/tapir ->
+  txomics.github.io/tapir, github.com/tidyomics; the last two set `in-code` so the
+  name regex leaves them as plain links).
+  Adding lines here easily spills onto a new page (the photo row follows it).
+- Grammar slide: context names in the bullets are colored to match the
+  plyxp-contexts figure via slide-local helpers `c-rows` (purple #6A3D9A),
+  `c-cols` (dark orange #D2691E), `c-assays` (dark green #2E7D32), each `text(fill, raw(s))`.
