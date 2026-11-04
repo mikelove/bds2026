@@ -107,15 +107,6 @@ knitr:
   box(clip: true, radius: 50%, width: 3cm, height: 3cm,
     image("images/" + file + ".jpg", width: 100%)),
   align(center, text(size: 13pt, fill: luma(90), name))))
-// notes to self for word-free slides: small grey text in the bottom margin
-#let notes(body) = place(bottom + left, dy: 1.2cm - 0.35cm, block(width: 100%, {
-  in-code.update(true)
-  set text(size: 11pt, fill: luma(150))
-  set par(leading: 0.4em)
-  show raw: set text(size: 1.2em)
-  body
-  in-code.update(false)
-}))
 #set page(numbering: none)
 #place(bottom + right,
   sticker-row("tximeta", "plyxp", "splicelogic", h: 2.8cm))
@@ -170,10 +161,6 @@ knitr:
 # Multi-sample long-read RNA-seq workflow
 
 ```{=typst}
-#notes[Long reads capture near-complete transcripts, but short-read
-  multi-sample methods don't transfer directly. Gaps: provenance of novel
-  transcripts, event detection from whole transcripts, isoform-level
-  inference. Our tools in blue: tximeta, plyxp, splicelogic.]
 #let unc = rgb("#4B9CD3")
 #let stage(title, tools, desc, ours: false) = block(
   width: 100%, height: 100%, inset: (x: 5pt, y: 4pt), radius: 4pt,
@@ -218,11 +205,18 @@ knitr:
   #h(0.2em) recent work from the lab])
 ```
 
+# Object-oriented genomics
+
+```{=typst}
+#align(center, image("images/sumexpv2.jpg", height: 10cm))
+```
+
+_SummarizedExperiment_ links _counts_ to transcript and sample _metadata_
+
 # Metadata complications
 
 ```{=typst}
 #sticker("tximeta")
-#notes[When you incorporate novel transcripts, you end up with mixed metadata, some information you have just for novel, some only for annotated. Bookkeeping issues arise from this.]
 #code-size.update(13pt)
 #code-width.update(72%)
 #code-brackets.update(((1, 10, "Annotated"), (12, 23, "Novel")))
@@ -264,21 +258,13 @@ chrY de-novo-tool exon 12909360 12909407 . + 4879 ...
 
 ```{=typst}
 #sticker("tximeta")
-#align(center, image("images/mixed-ref-diagram.png", height: 10.5cm))
-#notes[oarfish records a digest per sub-index: annotated (e.g. GENCODE) and
-  novel (e.g. bambu, de novo, spike-ins, fusions); salmon via a Snakemake rule
-  writing `mixed_ref_digests.json`]
+#align(center, image("images/mixed-ref-diagram.png", height: 12cm))
 ```
 
 # tximeta: inspect, link, and update metadata
 
 ```{=typst}
 #sticker("tximeta")
-#notes[`importData()`: counts + per-sub-index digests (salmon: add
-  `mixedDigest = "mixed_ref_digests.json"`). `inspectDigests()`: annotated
-  matches GENCODE v48, novel has no match. `makeLinkedTxpData()`: register
-  novel transcripts once in the file cache. `updateMetadata(ranges = TRUE)`:
-  metadata + ranges for both sets. Still open: subsets of the annotation.]
 #code-size.update(20pt)
 #code-width.update(72%)
 #place(right + horizon, dx: -0.8cm, image("images/inspector.png", height: 6.6cm))
@@ -301,40 +287,48 @@ se <- updateMetadata(se, ranges = TRUE)
 #code-width.update(100%)
 ```
 
-# plyxp: a grammar for annotated matrices
+# You have your object, now what?
+
+```{=typst}
+#align(center, image("images/sumexpv2.jpg", height: 10cm))
+```
+
+- Requires learning domain-specific methods 
+- (AI-generated) code can quickly become obtuse
+
+# A grammar for annotated matrices
 
 ```{=typst}
 #sticker("plyxp")
+#place(top + right, dx: 2.8cm - 0.7cm - 3.1cm, dy: 0.7cm - 1.2cm,
+  sticker-img("tidyomics", 3cm))
 #student("justinlandis", "Justin Landis")
-#align(center, image("images/sumexp.png", height: 5.5cm))
+#align(center, image("images/plyxp-contexts.png", height: 9cm))
+#align(center, box(align(left)[
+  #set text(size: 16pt)
+  - plyxp brings _dplyr_ verbs to _SummarizedExperiment_ objects, efficiently
+  - Each expression is scoped to a context: _assays_, `rows()`, or `cols()`
+  - Pronouns `.assays`, `.rows`, `.cols` reach across contexts
+  - We are looking to support _AnnData_
+]))
 ```
-
-- SummarizedExperiment links counts to transcript and sample data
-- plyxp brings _dplyr_ verbs to SummarizedExperiment objects
-- Each expression is scoped: assays, `rows()`, or `cols()`
-- Pronouns like `.rows` and `.cols` reach across contexts
-- Explicit and efficient; now inside tidySummarizedExperiment
 
 # plyxp: mutate, filter, aggregate
 
 ```{=typst}
 #sticker("plyxp")
-#notes[`mutate()` in the assays context: scale counts by row data
-  (`.rows$tx_length`) and column data (`.cols$size_factor`). `rows()` /
-  `cols()` write to rowData / colData; `.assays_asis` gives the native matrix
-  for `rowMeans()`. `filter()` subsets by metadata. `group_by(rows(gene_id))` +
-  `summarize()` aggregates isoforms to genes. Timing: 4.7 ms native, 19 ms
-  plyxp, 372 ms unwound to a long table.]
 ```
 
 ```{r}
 #| eval: false
 xp <- new_plyxp(se) |>
   mutate(
-    cts_bp = counts / .rows$tx_length,
-    norm = counts / .cols$size_factor,
-    rows(ave = rowMeans(.assays_asis$counts)),
-    cols(trt = condition == "trt")) |>
+
+    scaled_cts = counts / .cols$size_factor,
+    rows(ave = rowMeans(.assays_asis$scaled_cts)),
+    rows(ave2 = map_dbl(.assays$scaled_cts, mean))
+
+  ) |>
   filter(rows(ave > 10), cols(batch != "b3"))
 
 genes <- xp |>
@@ -346,10 +340,6 @@ genes <- xp |>
 
 ```{=typst}
 #sticker("plyxp")
-#notes[Placeholder. Count splitting: binomial thinning of each count into
-  independent train and test matrices, so the same data can be used for
-  selection (e.g. clustering, filtering) and for inference without double
-  dipping. Both new assays live alongside `counts` in the same object.]
 #code-size.update(20pt)
 #code-width.update(55%)
 #place(right + horizon, dx: -0.8cm,
@@ -365,7 +355,7 @@ thin <- function(x, eps = 0.5) {
   matrix(y, nrow = nrow(x))
 }
 
-xp <- new_plyxp(se) |>
+split <- xp |>
   mutate(train = thin(counts),
          test = counts - train)
 ```
@@ -375,29 +365,23 @@ xp <- new_plyxp(se) |>
 #code-width.update(100%)
 ```
 
-# splicelogic: from transcripts to events
+# Transcript usage across samples
 
 ```{=typst}
 #sticker("splicelogic")
 #student("beatrizcampillo", "Beatriz Campillo")
+#align(center, image("images/justin-example.png", height: 9cm))
+#align(center, box(align(left)[
+  - Splicing changes rarely come one event at a time
+  - How to turn transcript sets into events?
+  - How to turn events into biological interpretation?
+]))
 ```
-
-- Splicing changes rarely come one event at a time
-- Short-read methods lack full-transcript context for events
-- splicelogic turns any two transcript sets into events
-- Works with any DTU method, or novel vs. annotated
-- Events are genomic ranges, ready for plyranges and Biostrings
 
 # splicelogic: events as composable ranges
 
 ```{=typst}
 #sticker("splicelogic")
-#notes[`prepare_exons()` from DTU results of any method (satuRn, DRIMSeq,
-  edgeR), or `prepare_exons_by_partition()` for two transcript sets, e.g.
-  novel vs. annotated. `find_all_events()`: nine event types (SE, IE, MXE, RI,
-  SI, A5SS, A3SS, ATSS, ATES). Skipped exons, then 100 bp upstream intron, then
-  sequence: in GTEx PTBP1 knockdown these recover PTBP1's binding preference.
-  `%>%` needed for the `.` placeholder.]
 ```
 
 ```{r}
@@ -418,18 +402,16 @@ skipped$intron_seq
 
 ```{=typst}
 #sticker("splicelogic")
-#notes[Placeholder. Events called by `find_all_events()` (e.g. SMAP1: ATSS,
-  ATES, SE); skipped exons vs. background; nucleotide composition and YCUY
-  motif density upstream of the 3' splice site recover PTBP1's binding
-  preference.]
-#grid(columns: 2, column-gutter: 0.4cm, row-gutter: 0.4cm, align: center + horizon,
-  image("images/gtex-example-genes.png", height: 4.9cm),
-  image("images/gtex-motif-hits.png", height: 4.9cm),
-  image("images/gtex-exon-compare.png", height: 4.6cm),
-  image("images/gtex-nucleotides.png", height: 4.6cm))
+#grid(columns: 2, column-gutter: 0.4cm, align: horizon,
+  stack(spacing: 0.4cm,
+    image("images/gtex-example-genes.png", width: 10.6cm),
+    image("images/gtex-exon-compare.png", width: 10.6cm)),
+  stack(spacing: 0.4cm,
+    image("images/gtex-motif-hits.png", width: 8.2cm),
+    image("images/gtex-nucleotides.png", width: 8.2cm)))
 #v(0.3cm)
 #grid(columns: (1fr, auto), align: horizon,
-  text(size: 13pt, fill: luma(90))[Data: Glinos et al., _Nature_ 608, 353--359 (2022),
+  text(size: 11pt, fill: luma(90))[Data: Glinos _et al._, (GTEX v9) _Nature_ 608, 353--359 (2022),
     #link("https://doi.org/10.1038/s41586-022-05035-y")[doi:10.1038/s41586-022-05035-y]],
   stack(dir: ltr, spacing: 0.3cm,
     align(horizon, text(size: 13pt, fill: luma(90))[analyzed on]),
@@ -441,12 +423,6 @@ skipped$intron_seq
 
 ```{=typst}
 #sticker("splicelogic")
-#notes[Any statistic computed on the transcript count table with plyxp can
-  ride along to events. Here `piu` (percent isoform usage, computed per gene
-  with `group_by(rows(gene_id))`) is summarized to mean and SD per condition.
-  After looking these up by `tx_id` onto the exons,
-  `preprocess(additional_columns = ...)` carries them into the events
-  (`event_mean_ctl`, etc.): skipped exon goes .8 -> .2 with treatment.]
 #code-size.update(20pt)
 ```
 
@@ -473,17 +449,26 @@ exons <- exons |>
 #code-size.update(24pt)
 ```
 
+# Modular tools and functions
+
+```{=typst}
+#align(center, image("images/lego.jpg", height: 12.5cm))
+```
+
 # TAPIR: transcript analysis pipelines in R
 
 ```{=typst}
 #student("rachelsharp", "Rachel Sharp")
-#align(center, image("images/tapir.png", height: 6cm))
+#grid(columns: (auto, 1fr), column-gutter: 1cm, align: horizon,
+  image("images/tapir.png", height: 9cm),
+  [
+    #set text(size: 16pt)
+    #align(center, image("images/lego.jpg", height: 4.5cm))
+    - Collaboration with Stephanie Hicks (JHU), Sowmya Parthiban (JHU)
+    - Chapters are being re-organized now by _Dr. Rachel Sharp_
+    - #link("https://txomics.github.io/tapir/")[txomics/tapir]
+  ])
 ```
-
-- A collaboration with Stephanie Hicks's lab at JHU
-- Sowmya Parthiban (Hicks lab) and the Love lab
-- Chapters are being re-organized by Dr. Rachel Sharp
-- Code and docs: [txomics/tapir](https://txomics.github.io/tapir/)
 
 # Back to the question: why new syntax?
 
@@ -491,8 +476,8 @@ exons <- exons |>
 #align(center, image("images/finally.png", height: 6cm))
 ```
 
-- tximeta: provenance travels with the data, no silent mismatches
-- plyxp: _dplyr_ verbs on standard objects, short and reviewable
+- tximeta: provenance travels with the data
+- plyxp: _dplyr_ verbs on standard objects
 - splicelogic: ranges in, ranges out: composes with plyranges
 - Tested verbs handle the bookkeeping
 
@@ -526,6 +511,8 @@ exons <- exons |>
     *Funding*
     - NIH / NHGRI \ R01-HG009937
     - Wellcome Trust, Essential Open Source Software for Science (EOSS) \ 313919/Z/24/Z
+
+    #link("https://mikelove.github.io/pages/software.html")[#text(fill: rgb("#2B6CA3"))[Love Lab software]]
   ],
 )
 #let lab-photo(file, name) = stack(spacing: 0.25em,

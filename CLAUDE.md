@@ -24,16 +24,16 @@ Source abstract is in `abstract.txt`.
 - Text slides: 3-5 bullets of 6-12 words each. No bold for emphasis in
   bullets (the user dislikes that style).
 - Diagram, code, and flowchart slides have no words besides the title (no code
-  comments either). Talking points go in `#notes[...]` (11pt grey, bottom
-  margin, software-name styling suppressed) as notes to self.
-- Max 17 slides: title, question, why-new-syntax (bullets with smaller grey
+  comments either). No speaker notes in the `.qmd` (the user removed them).
+- Max 19 slides: title, question, why-new-syntax (bullets with smaller grey
   `#detail[...]` second lines), workflow, tximeta (concept, diagram, code),
   plyxp (concept, code, count-splitting code + dashed "plot TBD" placeholder box),
-  splicelogic (concept, code, GTEx PTBP1 results, plyxp-stats-to-events code), TAPIR (collaboration with Hicks lab, JHU;
-  Rachel Sharp photo; `images/tapir.png` book screenshot, 6cm centered above
-  the bullets), back-to-question (merged
+  splicelogic (concept, code, GTEx PTBP1 results, plyxp-stats-to-events code), "Modular tools and
+  functions" (`images/lego.jpg`, 12.5cm, no text), TAPIR (collaboration with Hicks lab, JHU;
+  Rachel Sharp photo; `images/tapir.png` book screenshot, 9cm, left of 16pt
+  bullets in a raw `#grid`; `images/lego.jpg` 4.5cm centered above the bullets), back-to-question (merged
   with summary, sticker row), acknowledgments. One code slide per tool showing
-  its key operations; talking points live in `#notes[...]`.
+  its key operations.
 
 ## Typst / Quarto notes
 
@@ -70,8 +70,9 @@ Source abstract is in `abstract.txt`.
   is `place()`d bottom right; inside the grid's right column it spilled to a new page.
 - Student photos: `#student(file, name)` (circular 3cm photo + name, bottom-right,
   under the sticker column, caption in the bottom margin). Justin Landis on the
-  first plyxp slide,
-  Beatriz Campillo on the splicelogic slide, Rachel Sharp on the TAPIR slide; jpgs copied into `images/`.
+  first plyxp slide (with `images/plyxp-contexts.png`, 9cm centered above 16pt bullets in a `#[...]` block;
+  a tidyomics sticker is `place()`d 3.1cm left of the plyxp corner sticker, this slide only),
+  Beatriz Campillo on the splicelogic slide (with `images/justin-example.png`, 11cm (max that fits) centered above the bullets), Rachel Sharp on the TAPIR slide; jpgs copied into `images/`.
 - Content slide 2 is a workflow diagram (Typst `#grid` of `stage()` boxes; our
   tools highlighted in UNC blue) that replaced the original motivation slide.
   `stage(title, tools, desc)` = bold title, tools line, smaller grey
@@ -83,7 +84,7 @@ Source abstract is in `abstract.txt`.
 - tximeta section follows the mixed-reference material in `refs/`
   (tximeta-mixed-ref-poster.qmd, salmon-with-mixed-ref-*, tximeta.Rmd):
   importData() -> inspectDigests() -> updateMetadata(), makeLinkedTxpData(),
-  salmon (Snakemake digest rule + `mixedDigest`) is only mentioned in passing. Diagram is
+  salmon (Snakemake digest rule + `mixedDigest`) is only mentioned in passing. Diagram (12cm tall) is
   `images/mixed-ref-diagram.png` from the tximeta repo (the SVG renders with
   extra whitespace and small text in Typst, so use the PNG).
 - plyxp and splicelogic messaging follows the Intro/Conclusion of the papers in
@@ -117,8 +118,8 @@ Source abstract is in `abstract.txt`.
   adds `v(1fr)` after the heading and (via the `slide-open` state) another
   `v(1fr)` before breaking to the next slide; a final `#v(1fr)` ends the document.
 - For layout checks, render a copy in the scratchpad, not in the project dir.
-- GTEx results slide: 2x2 `#grid` of `images/gtex-*.png` (4.9cm / 4.6cm rows),
-  then a 13pt grey footer row: Glinos et al. 2022 Nature citation (left) and
+- GTEx results slide: two-column `#grid` of stacked `images/gtex-*.png`
+  (left: heights 4.9 / 4.6cm; right: motif hits and logo both width 8.2cm), then a grey footer row (11pt citation): Glinos et al. 2022 Nature citation (left) and
   "analyzed on" + `images/anvil.png` / `images/terra.png` logos (right).
 - Code chunks use `set text(size: 24pt)` / `par(leading: 0.5em)` inside the
   `Skylighting` override (renders ~ body size, since raw tokens scale to 0.8em).
@@ -132,7 +133,7 @@ Source abstract is in `abstract.txt`.
 - Third splicelogic slide: only the plyxp `summarize()` of `piu` (percent
   isoform usage) mean/SD per condition, then the `preprocess(additional_columns
   = ...)` call on exons (from `refs/demo.R`; the per-gene piu step and tx_id
-  lookup live in the notes). 20pt code, then a small grey right-aligned link to
+  lookup are left out). 20pt code, then a small grey right-aligned link to
   txomics.github.io/tapir/annotate-plyxp-splicelogic.html. The link body is a
   `box()` with `in-code.update(true/false)` around it: without that, the
   software-name regex splits it and the link highlights word by word.
