@@ -38,7 +38,7 @@ knitr:
 // software names: monospace + deep blue, except inside code chunks
 // (sized by the inline raw rule below)
 #let in-code = state("in-code", false)
-#show regex("\\b(txomics/tapir|tximeta|tximport|plyxp|tidySE|splicelogic|tapir|TAPIR|plyranges|tidyomics|oarfish|bambu|DESeq2|satuRn|TreeTerminus|terminus|treeclimbR|stageR|tidySummarizedExperiment|dplyr|Biostrings|DRIMSeq|edgeR|Biosurfer|rlang|salmon|Snakemake)\\b"): it => context {
+#show regex("\\b(txomics/tapir|tximeta|tximport|plyxp|tidySE|splicelogic|tapir|TAPIR|plyranges|tidyomics|salmon|oarfish|bambu|DESeq2|satuRn)\\b"): it => context {
   if in-code.get() { it } else { text(fill: rgb("#2B6CA3"), raw(it.text)) }
 }
 // inline code in slide text: scale up from raw's 0.8em (not inside chunks)
@@ -281,7 +281,7 @@ chrY de-novo-tool exon 12909360 12909407 . + 4879 ...
   metadata + ranges for both sets. Still open: subsets of the annotation.]
 #code-size.update(20pt)
 #code-width.update(72%)
-#place(right + horizon, image("images/inspector.png", height: 5.6cm))
+#place(right + horizon, dx: -0.8cm, image("images/inspector.png", height: 6.6cm))
 ```
 
 ```{r}
@@ -310,7 +310,7 @@ se <- updateMetadata(se, ranges = TRUE)
 ```
 
 - SummarizedExperiment links counts to transcript and sample data
-- plyxp brings dplyr verbs to SummarizedExperiment objects
+- plyxp brings _dplyr_ verbs to SummarizedExperiment objects
 - Each expression is scoped: assays, `rows()`, or `cols()`
 - Pronouns like `.rows` and `.cols` reach across contexts
 - Explicit and efficient; now inside tidySummarizedExperiment
@@ -340,6 +340,39 @@ xp <- new_plyxp(se) |>
 genes <- xp |>
   group_by(rows(gene_id)) |>
   summarize(counts = colSums(counts))
+```
+
+# plyxp: count splitting
+
+```{=typst}
+#sticker("plyxp")
+#notes[Placeholder. Count splitting: binomial thinning of each count into
+  independent train and test matrices, so the same data can be used for
+  selection (e.g. clustering, filtering) and for inference without double
+  dipping. Both new assays live alongside `counts` in the same object.]
+#code-size.update(20pt)
+#code-width.update(55%)
+#place(right + horizon, dx: -0.8cm,
+  rect(width: 8cm, height: 6.6cm, radius: 3pt,
+    stroke: (paint: luma(160), dash: "dashed"),
+    align(center + horizon, text(size: 16pt, fill: luma(130), [plot TBD]))))
+```
+
+```{r}
+#| eval: false
+thin <- function(x, eps = 0.5) {
+  y <- rbinom(length(x), x, eps)
+  matrix(y, nrow = nrow(x))
+}
+
+xp <- new_plyxp(se) |>
+  mutate(train = thin(counts),
+         test = counts - train)
+```
+
+```{=typst}
+#code-size.update(24pt)
+#code-width.update(100%)
 ```
 
 # splicelogic: from transcripts to events
@@ -379,6 +412,29 @@ skipped <- exons |>
 
 # metadata attached to ranges as columns
 skipped$intron_seq
+```
+
+# splicelogic: GTEx PTBP1 knockdown
+
+```{=typst}
+#sticker("splicelogic")
+#notes[Placeholder. Events called by `find_all_events()` (e.g. SMAP1: ATSS,
+  ATES, SE); skipped exons vs. background; nucleotide composition and YCUY
+  motif density upstream of the 3' splice site recover PTBP1's binding
+  preference.]
+#grid(columns: 2, column-gutter: 0.4cm, row-gutter: 0.4cm, align: center + horizon,
+  image("images/gtex-example-genes.png", height: 4.9cm),
+  image("images/gtex-motif-hits.png", height: 4.9cm),
+  image("images/gtex-exon-compare.png", height: 4.6cm),
+  image("images/gtex-nucleotides.png", height: 4.6cm))
+#v(0.3cm)
+#grid(columns: (1fr, auto), align: horizon,
+  text(size: 13pt, fill: luma(90))[Data: Glinos et al., _Nature_ 608, 353--359 (2022),
+    #link("https://doi.org/10.1038/s41586-022-05035-y")[doi:10.1038/s41586-022-05035-y]],
+  stack(dir: ltr, spacing: 0.3cm,
+    align(horizon, text(size: 13pt, fill: luma(90))[analyzed on]),
+    image("images/anvil.png", height: 1.1cm),
+    image("images/terra.png", height: 1.1cm)))
 ```
 
 # splicelogic: carry isoform stats to events
@@ -436,9 +492,9 @@ exons <- exons |>
 ```
 
 - tximeta: provenance travels with the data, no silent mismatches
-- plyxp: scoped verbs on standard objects, short and reviewable
-- splicelogic: ranges in, ranges out --- composes with plyranges
-- Write the intent; tested verbs handle the bookkeeping
+- plyxp: _dplyr_ verbs on standard objects, short and reviewable
+- splicelogic: ranges in, ranges out: composes with plyranges
+- Tested verbs handle the bookkeeping
 
 ```{=typst}
 #place(bottom + right, dy: 1.2cm - 0.5cm,
@@ -461,7 +517,8 @@ exons <- exons |>
     - Isaiah Love --- "florms" 🐦
 
     *Collaborators*
-    - Rob Patro and Patro lab --- oarfish
+    - Zahra Zare Jousheghani --- oarfish
+    - Rob Patro and Patro lab
     - Charlotte Soneson --- tximeta
     - Stefano Mangiola et al. --- tidyomics
   ],
@@ -479,7 +536,8 @@ exons <- exons |>
   stack(dir: ltr, spacing: 0.5cm,
     lab-photo("beatrizcampillo", "Beatriz"),
     lab-photo("justinlandis", "Justin"),
-    lab-photo("rachelsharp", "Rachel")))
+    lab-photo("rachelsharp", "Rachel"),
+    lab-photo("zahra", "Zahra")))
 ```
 
 ```{=typst}

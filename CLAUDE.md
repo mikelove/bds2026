@@ -26,9 +26,10 @@ Source abstract is in `abstract.txt`.
 - Diagram, code, and flowchart slides have no words besides the title (no code
   comments either). Talking points go in `#notes[...]` (11pt grey, bottom
   margin, software-name styling suppressed) as notes to self.
-- Max 15 slides: title, question, why-new-syntax (bullets with smaller grey
+- Max 17 slides: title, question, why-new-syntax (bullets with smaller grey
   `#detail[...]` second lines), workflow, tximeta (concept, diagram, code),
-  plyxp (concept, code), splicelogic (concept, code, plyxp-stats-to-events code), TAPIR (collaboration with Hicks lab, JHU;
+  plyxp (concept, code, count-splitting code + dashed "plot TBD" placeholder box),
+  splicelogic (concept, code, GTEx PTBP1 results, plyxp-stats-to-events code), TAPIR (collaboration with Hicks lab, JHU;
   Rachel Sharp photo; `images/tapir.png` book screenshot, 6cm centered above
   the bullets), back-to-question (merged
   with summary, sticker row), acknowledgments. One code slide per tool showing
@@ -65,7 +66,7 @@ Source abstract is in `abstract.txt`.
   bullets; a trailing `#v(2.5cm)` reserves room for the placed sticker row
   (7cm overlapped it). Acknowledgments: `images/music_florm.png` (5cm) is `place()`d top
   right with the corner-sticker offsets, and `#v(3cm)` pushes the grid down.
-  A `lab-photo()` row (Beatriz, Justin, Rachel; 2.6cm circles, first names)
+  A `lab-photo()` row (Beatriz, Justin, Rachel, Zahra; 2.6cm circles, first names)
   is `place()`d bottom right; inside the grid's right column it spilled to a new page.
 - Student photos: `#student(file, name)` (circular 3cm photo + name, bottom-right,
   under the sticker column, caption in the bottom margin). Justin Landis on the
@@ -116,6 +117,9 @@ Source abstract is in `abstract.txt`.
   adds `v(1fr)` after the heading and (via the `slide-open` state) another
   `v(1fr)` before breaking to the next slide; a final `#v(1fr)` ends the document.
 - For layout checks, render a copy in the scratchpad, not in the project dir.
+- GTEx results slide: 2x2 `#grid` of `images/gtex-*.png` (4.9cm / 4.6cm rows),
+  then a 13pt grey footer row: Glinos et al. 2022 Nature citation (left) and
+  "analyzed on" + `images/anvil.png` / `images/terra.png` logos (right).
 - Code chunks use `set text(size: 24pt)` / `par(leading: 0.5em)` inside the
   `Skylighting` override (renders ~ body size, since raw tokens scale to 0.8em).
   Keep code lines under ~50 characters; put comments on their own lines.
@@ -123,7 +127,7 @@ Source abstract is in `abstract.txt`.
   via a global `#show raw: set text(font: "Fira Code")` in the first Typst block.
 - Per-slide code overrides: `#code-size.update(20pt)` / `#code-width.update(72%)`
   in a Typst block before the chunk, reset to 24pt / 100% after. Used on the
-  tximeta code slide, with `images/inspector.png` (5.6cm, ~1/3 slide height)
+  tximeta code slide, with `images/inspector.png` (6.6cm, `dx: -0.8cm`)
   `place()`d right + horizon.
 - Third splicelogic slide: only the plyxp `summarize()` of `piu` (percent
   isoform usage) mean/SD per condition, then the `preprocess(additional_columns
