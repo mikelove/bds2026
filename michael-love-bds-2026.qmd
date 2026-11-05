@@ -129,10 +129,10 @@ knitr:
 
 ```{=typst}
 #place(top + center, dy: -0.9cm,
-  image("images/florm_human_coding.png", height: 13.8cm))
+  image("images/florm_human_coding.jpg", height: 13.8cm))
 #place(bottom + left, block[
   - An LLM writes good #box[R/python] code for RNA-seq in seconds
-  - Why build frameworks and new syntax?
+  - Why build frameworks and new syntax for doing functional genomics?
 ])
 ```
 
@@ -504,7 +504,7 @@ exons |>
 # Back to the question: why new syntax?
 
 ```{=typst}
-#align(center, image("images/finally.png", height: 5.5cm))
+#align(center, image("images/finally.jpg", height: 5.5cm))
 ```
 
 - tximeta: provenance travels with the data
@@ -522,7 +522,7 @@ exons |>
 
 ```{=typst}
 #place(top + right, dx: 2.8cm - 0.7cm, dy: 0.7cm - 1.2cm,
-  image("images/music_florm.png", height: 5cm))
+  image("images/music_florm.jpg", height: 5cm))
 #v(2.6cm)
 #[
 #set text(size: 16pt)
