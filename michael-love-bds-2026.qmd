@@ -335,7 +335,7 @@ Works for [salmon](https://github.com/thelovelab/salmon-with-mixed-ref) and othe
 
 ```{r}
 #| eval: false
-xp <- new_plxyp(se) |>
+xp <- new_plyxp(se) |>
   mutate(
     scaled_cts = counts / .cols$size_factor,
     rows(ave = map_dbl(.assays$scaled_cts, mean))
