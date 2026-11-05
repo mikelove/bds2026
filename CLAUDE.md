@@ -86,7 +86,10 @@ Source abstract is in `abstract.txt`.
   description (pass `none` for no tools), vertically centered. First column
   stacks Annotate/Detect in a nested grid wrapped in `block(height: 100%)` so
   the 1fr rows resolve; the next column holds two rotated arrows (±30deg)
-  converging on Quantify. A centered legend below (inline swatch box matching
+  converging on Quantify. A second grid row holds a `grid.cell(x: 4, colspan: 7)`
+  grey line under Import..Interpret labeled "supported by R/Bioconductor
+  infrastructure"; arrow columns are fixed 0.7cm (with `auto` columns the
+  spanning 100%-width line blew one up and collapsed the boxes). A centered legend below (inline swatch box matching
   `ours: true`) reads "recent work from the lab".
 - tximeta section follows the mixed-reference material in `refs/`
   (tximeta-mixed-ref-poster.qmd, salmon-with-mixed-ref-*, tximeta.Rmd):
@@ -125,7 +128,7 @@ Source abstract is in `abstract.txt`.
   adds `v(1fr)` after the heading and (via the `slide-open` state) another
   `v(1fr)` before breaking to the next slide; a final `#v(1fr)` ends the document.
 - For layout checks, render a copy in the scratchpad, not in the project dir.
-- GTEx results slide: two-column `#grid` of stacked `images/gtex-*.png`
+- GTEx results slide: two-column `#grid` (wrapped in `pad(left: 2cm)`) of stacked `images/gtex-*.png`
   (left: heights 4.9 / 4.6cm; right: motif hits and logo both width 8.2cm), then a grey footer row (11pt citation): Glinos et al. 2022 Nature citation (left) and
   "analyzed on" + `images/anvil.png` / `images/terra.png` logos (right).
 - Code chunks use `set text(size: 24pt)` / `par(leading: 0.5em)` inside the
@@ -147,7 +150,8 @@ Source abstract is in `abstract.txt`.
 - "Compute and propagate custom stats" slide (plyxp `summarize()` per group ->
   splicelogic `preprocess(additional_columns = ...)`): plyxp + splicelogic
   corner stickers side by side (title kept short so it clears both), small
-  `images/lego.jpg` (4.5cm) centered above the code chunk.
+  `images/lego-blueprint.jpg` (8cm) `place()`d right + horizon (`dy: 0.4cm` to match the code center), code at 64% width, 16pt
+  (long lines split so they fit).
 - Acknowledgments grid is wrapped in `#[ ... ]` with 16pt text, `list(spacing: 0.5em)`,
   `par(spacing: 0.8em)`, after `#v(2.6cm)`; the left column ends with two link bullets
   (github.com/thelovelab, mikelove.github.io -> /pages/software.html, txomics/tapir ->

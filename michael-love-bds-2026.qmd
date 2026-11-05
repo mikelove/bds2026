@@ -179,9 +179,10 @@ knitr:
 #let gap = 0.5cm
 #v(0.6em)
 #grid(
-  columns: (1.15fr, 1cm, 1fr, auto, 1fr, auto, 1fr, auto, 1fr, auto, 1fr),
-  rows: 4.6cm,
+  columns: (1.15fr, 1cm, 1fr, 0.7cm, 1fr, 0.7cm, 1fr, 0.7cm, 1fr, 0.7cm, 1fr),
+  rows: (4.6cm, auto),
   column-gutter: 4pt,
+  row-gutter: 0.35cm,
   block(height: 100%, grid(rows: (1fr, 1fr), row-gutter: gap,
     stage("Define", none)[annotated transcripts],
     stage("Detect", none)[_de novo_ / novel transcripts])),
@@ -197,6 +198,10 @@ knitr:
   stage("Compare")[DESeq2 satuRn][assessing differences across samples],
   arrow,
   stage("Interpret", ours: true)[splicelogic plyranges][deducing splicing causes & consequences],
+  grid.cell(x: 4, y: 1, colspan: 7, stack(
+    line(length: 100%, stroke: 2pt + luma(120)),
+    v(0.25cm),
+    align(center, text(size: 13pt, fill: luma(80))[supported by R/Bioconductor infrastructure]))),
 )
 #v(0.8em)
 #align(center, text(size: 13pt, fill: luma(80))[
@@ -211,9 +216,10 @@ knitr:
 #align(center, image("images/sumexpv2.jpg", height: 10cm))
 ```
 
-_SummarizedExperiment_ links _counts_ to transcript and sample _metadata_
+- _SummarizedExperiment_ links matrix to feature and sample metadata
+- Analagous to python's _anndata_ object
 
-# Metadata complications
+# Transcript metadata complications
 
 ```{=typst}
 #sticker("tximeta")
@@ -254,7 +260,7 @@ chrY de-novo-tool exon 12909360 12909407 . + 4879 ...
 #code-brackets.update(none)
 ```
 
-# tximeta: mixed reference workflow
+# tximeta: mixed reference workflow (2025)
 
 ```{=typst}
 #sticker("tximeta")
@@ -274,6 +280,7 @@ chrY de-novo-tool exon 12909360 12909407 . + 4879 ...
 #| eval: false
 se <- importData(coldata, type = "oarfish")
 inspectDigests(se)
+
 #> index     source  organism release genome ...
 #> annotated GENCODE Homo sa… 48      GRCh38 ...
 #> novel     <NA>    <NA>     <NA>    <NA>   ...
@@ -285,7 +292,10 @@ se <- updateMetadata(se, ranges = TRUE)
 ```{=typst}
 #code-size.update(24pt)
 #code-width.update(100%)
+#v(0.8em)
 ```
+
+Works for [salmon](https://github.com/thelovelab/salmon-with-mixed-ref) and other quantifiers too
 
 # You have your object, now what?
 
@@ -293,7 +303,7 @@ se <- updateMetadata(se, ranges = TRUE)
 #align(center, image("images/sumexpv2.jpg", height: 10cm))
 ```
 
-- Requires learning domain-specific methods 
+- Even simple exploration requires learning domain-specific methods 
 - (AI-generated) code can quickly become obtuse
 
 # A grammar for annotated matrices
@@ -303,15 +313,15 @@ se <- updateMetadata(se, ranges = TRUE)
 #place(top + right, dx: 2.8cm - 0.7cm - 3.1cm, dy: 0.7cm - 1.2cm,
   sticker-img("tidyomics", 3cm))
 #student("justinlandis", "Justin Landis")
-#align(center, image("images/plyxp-contexts.png", height: 9cm))
+#align(center, image("images/plyxp-bindings.png", height: 9cm))
 // context colors: rows purple, cols dark orange, assays dark green
 #let c-rows(s) = text(fill: rgb("#6A3D9A"), raw(s))
 #let c-cols(s) = text(fill: rgb("#D2691E"), raw(s))
 #let c-assays(s) = text(fill: rgb("#2E7D32"), raw(s))
 #align(center, box(align(left)[
   #set text(size: 16pt)
-  - plyxp brings _dplyr_ verbs to _SummarizedExperiment_ objects, efficiently
-  - Each expression is scoped to a context: #c-assays("assays"), #c-rows("rows()"), or #c-cols("cols()")
+  - plyxp brings _dplyr_ verbs to annotated matrices, efficiently
+  - Expressions are scoped to contexts: #c-assays("assays"), #c-rows("rows()"), or #c-cols("cols()")
   - Pronouns #c-assays(".assays"), #c-rows(".rows"), #c-cols(".cols") reach across contexts
   - We are looking to support _AnnData_
 ]))
@@ -328,10 +338,11 @@ se <- updateMetadata(se, ranges = TRUE)
 xp <- new_plxyp(se) |>
   mutate(
     scaled_cts = counts / .cols$size_factor,
-    rows(ave = rowMeans(.assays_asis$scaled_cts)),
-    rows(ave2 = map_dbl(.assays$scaled_cts, mean))
+    rows(ave = map_dbl(.assays$scaled_cts, mean))
   ) |>
   filter(rows(ave > 10), cols(batch != "b3"))
+
+# also: rowMeans(.assays_asis$scaled_cts)
 
 genes <- xp |>
   group_by(rows(gene_id)) |>
@@ -389,7 +400,7 @@ inner_nodes <- tree |>
 #align(center, box(align(left)[
   - Splicing changes rarely come one event at a time
   - How to turn transcript sets into events?
-  - How to turn events into biological interpretation?
+  - ... into biological interpretation?
 ]))
 ```
 
@@ -417,13 +428,13 @@ skipped$intron_seq
 
 ```{=typst}
 #sticker("splicelogic")
-#grid(columns: 2, column-gutter: 0.4cm, align: horizon,
+#pad(left: 2cm, grid(columns: 2, column-gutter: 0.4cm, align: horizon,
   stack(spacing: 0.4cm,
     image("images/gtex-example-genes.png", width: 10.6cm),
     image("images/gtex-exon-compare.png", width: 10.6cm)),
   stack(spacing: 0.4cm,
     image("images/gtex-motif-hits.png", width: 8.2cm),
-    image("images/gtex-nucleotides.png", width: 8.2cm)))
+    image("images/gtex-nucleotides.png", width: 8.2cm))))
 #v(0.3cm)
 #grid(columns: (1fr, auto), align: horizon,
   text(size: 11pt, fill: luma(90))[Reanalysis of: Glinos _et al._, (GTEX v9) _Nature_ 608, 353--359 (2022),
@@ -460,18 +471,23 @@ skipped$intron_seq
 #sticker("splicelogic")
 #place(top + right, dx: 2.8cm - 0.7cm - 3.1cm, dy: 0.7cm - 1.2cm,
   sticker-img("plyxp", 3cm))
-#align(center, image("images/lego.jpg", height: 4.5cm))
+#place(horizon + right, dy: 0.4cm, image("images/lego-blueprint.jpg", height: 8cm))
 #code-size.update(20pt)
+#code-width.update(64%)
 ```
 
 ```{r}
 #| eval: false
 usage_per_group <- xp |>
   group_by(cols(condition)) |>
-  summarize(mean = rowMeans(usage), sd = rowSds(usage))
+  summarize(
+    mean = rowMeans(usage),
+    sd = rowSds(usage))
 
+# to propagate custom stats to events
 exons |>
-  preprocess(..., additional_columns = c("pvalue", ...)) |>
+  preprocess(...,
+    additional_columns = ...)
 ```
 
 ```{=typst}
@@ -482,12 +498,13 @@ exons |>
       "txomics.github.io/tapir/annotate-plyxp-splicelogic")))])
 #in-code.update(false)
 #code-size.update(24pt)
+#code-width.update(100%)
 ```
 
 # Back to the question: why new syntax?
 
 ```{=typst}
-#align(center, image("images/finally.png", height: 6cm))
+#align(center, image("images/finally.png", height: 5.5cm))
 ```
 
 - tximeta: provenance travels with the data
